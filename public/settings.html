@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Configuracion - FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-content">
+      <header class="app-header">
+        <div class="app-header-left">
+          <a href="/dashboard" class="app-header-logo">
+            <span class="logo-icon">&#128268;</span>
+            <span>FTP MCP Open</span>
+          </a>
+          <nav class="app-header-nav"></nav>
+        </div>
+        <div class="app-header-right"></div>
+      </header>
+      <div class="page-content fade-in">
+
+        <div class="page-title">Configuracion</div>
+
+        <!-- Profile -->
+        <div class="settings-section">
+          <h3>&#128100; Perfil</h3>
+          <form id="profileForm">
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="profileName">Nombre</label>
+                <input type="text" id="profileName" placeholder="Tu nombre">
+              </div>
+              <div class="form-group">
+                <label for="profileEmail">Email</label>
+                <input type="email" id="profileEmail" disabled style="opacity:0.6;">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="profileBtn">Guardar Perfil</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Change password -->
+        <div class="settings-section">
+          <h3>&#128274; Cambiar Contrasena</h3>
+          <form id="passwordForm">
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label for="currentPw">Contrasena actual</label>
+                <input type="password" id="currentPw" required>
+              </div>
+              <div class="form-group">
+                <label for="newPw">Nueva contrasena</label>
+                <input type="password" id="newPw" required minlength="8">
+              </div>
+              <div class="form-group">
+                <label for="confirmPw">Confirmar nueva contrasena</label>
+                <input type="password" id="confirmPw" required>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="passwordBtn">Cambiar Contrasena</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- MCP Config -->
+        <div class="settings-section">
+          <h3>&#9881; Servidor MCP</h3>
+          <div class="info-row">
+            <span class="info-label">Endpoint MCP</span>
+            <span class="info-value">
+              <code class="text-mono text-accent" id="mcpEndpoint"></code>
+              <button class="btn btn-secondary btn-small" style="margin-left:8px;" onclick="copyText(document.getElementById('mcpEndpoint').textContent)">Copiar</button>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Version</span>
+            <span class="info-value" id="serverVersion">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Herramientas disponibles</span>
+            <span class="info-value">14 tools</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Estado</span>
+            <span class="info-value" id="serverStatus"><span class="status-dot gray"></span>Verificando...</span>
+          </div>
+        </div>
+
+        <!-- Danger zone -->
+        <div class="settings-section danger">
+          <h3>&#9888; Zona Peligrosa</h3>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+              <strong>Cerrar todas las sesiones</strong>
+              <p class="text-muted" style="font-size:13px;">Esto cerrara tu sesion en todos los dispositivos.</p>
+            </div>
+            <button class="btn btn-danger" onclick="closeAllSessions()">Cerrar Sesiones</button>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    (async () => {
+      const user = await checkAuth();
+      if (!user) return;
+      initTopNav('settings');
+      initHeaderUser(user);
+
+      // Load profile
+      try {
+        const data = await api('GET', '/api/settings/profile');
+        const u = data.user;
+        document.getElementById('profileName').value = u.name || '';
+        document.getElementById('profileEmail').value = u.email;
+      } catch {}
+
+      // MCP info
+      document.getElementById('mcpEndpoint').textContent = window.location.origin + '/mcp';
+      try {
+        const health = await api('GET', '/health');
+        document.getElementById('serverVersion').textContent = 'v' + health.version;
+        document.getElementById('serverStatus').innerHTML = '<span class="status-dot green pulse"></span>Activo';
+      } catch {
+        document.getElementById('serverStatus').innerHTML = '<span class="status-dot red"></span>Inactivo';
+      }
+    })();
+
+    // Profile form
+    document.getElementById('profileForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('profileBtn');
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      try {
+        await api('PUT', '/api/settings/profile', {
+          name: document.getElementById('profileName').value,
+        });
+        showToast('Perfil actualizado', 'success');
+      } catch (err) {
+        showToast(err.error || 'Error al actualizar', 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Guardar Perfil';
+      }
+    });
+
+    // Password form
+    document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newPw = document.getElementById('newPw').value;
+      const confirmPw = document.getElementById('confirmPw').value;
+      if (newPw !== confirmPw) { showToast('Las contrasenas no coinciden', 'error'); return; }
+
+      const btn = document.getElementById('passwordBtn');
+      btn.disabled = true; btn.textContent = 'Cambiando...';
+      try {
+        await api('PUT', '/api/settings/password', {
+          currentPassword: document.getElementById('currentPw').value,
+          newPassword: newPw,
+        });
+        showToast('Contrasena actualizada', 'success');
+        document.getElementById('passwordForm').reset();
+      } catch (err) {
+        showToast(err.error || 'Error al cambiar contrasena', 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Cambiar Contrasena';
+      }
+    });
+
+    async function closeAllSessions() {
+      confirmDialog(
+        'Se cerraran todas tus sesiones activas en todos los dispositivos. Seras redirigido al login.',
+        async () => {
+          try {
+            await api('DELETE', '/api/settings/sessions');
+            showToast('Sesiones cerradas', 'success');
+            setTimeout(() => { window.location.href = '/login'; }, 1500);
+          } catch (e) { showToast(e.error || 'Error al cerrar sesiones', 'error'); }
+        },
+        { title: 'Cerrar todas las sesiones', confirmText: 'Cerrar sesiones', danger: true }
+      );
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Proyectos - FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-content">
+      <header class="app-header">
+        <div class="app-header-left">
+          <a href="/dashboard" class="app-header-logo">
+            <span class="logo-icon">&#128268;</span>
+            <span>FTP MCP Open</span>
+          </a>
+          <nav class="app-header-nav"></nav>
+        </div>
+        <div class="app-header-right"></div>
+      </header>
+      <div class="page-content fade-in">
+
+        <div class="page-title">
+          Proyectos
+          <div style="display:flex;gap:8px;">
+            <select id="filterStatus" onchange="applyFilters()" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px; padding: 6px 12px; font-size: 13px;">
+              <option value="">Todos los estados</option>
+              <option value="active">Activos</option>
+              <option value="failed">Con errores</option>
+              <option value="untested">Sin probar</option>
+            </select>
+            <select id="sortBy" onchange="applyFilters()" style="background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); border-radius: 8px; padding: 6px 12px; font-size: 13px;">
+              <option value="name">Nombre</option>
+              <option value="recent">Mas reciente</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+          <div class="stat-card">
+            <div class="stat-label">Total proyectos</div>
+            <div class="stat-value" id="statTotal">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Conectados</div>
+            <div class="stat-value" id="statActive">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Con errores</div>
+            <div class="stat-value" id="statFailed">—</div>
+          </div>
+        </div>
+
+        <div id="projectsList">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    let allSites = [];
+
+    (async () => {
+      const user = await checkAuth();
+      if (!user) return;
+      initTopNav('projects');
+      initHeaderUser(user);
+
+      try {
+        const sitesData = await api('GET', '/api/sites');
+        allSites = sitesData.sites || [];
+
+        if (allSites.length === 0) {
+          document.getElementById('projectsList').innerHTML = '<div class="empty-state">No tienes proyectos. <a href="/sites">Agrega un sitio FTP</a> para comenzar.</div>';
+          return;
+        }
+
+        updateStats();
+        renderProjects();
+      } catch (e) {
+        document.getElementById('projectsList').innerHTML = '<div class="empty-state">Error al cargar proyectos</div>';
+      }
+    })();
+
+    function updateStats() {
+      const active = allSites.filter(s => s.testStatus === 'success').length;
+      const failed = allSites.filter(s => s.testStatus === 'failed').length;
+
+      document.getElementById('statTotal').textContent = allSites.length;
+      document.getElementById('statActive').textContent = active;
+      document.getElementById('statFailed').textContent = failed;
+    }
+
+    function applyFilters() {
+      renderProjects();
+    }
+
+    function renderProjects() {
+      const filterStatus = document.getElementById('filterStatus').value;
+      const sortBy = document.getElementById('sortBy').value;
+
+      let filtered = [...allSites];
+
+      // Apply filter
+      if (filterStatus === 'active') {
+        filtered = filtered.filter(s => s.testStatus === 'success');
+      } else if (filterStatus === 'failed') {
+        filtered = filtered.filter(s => s.testStatus === 'failed');
+      } else if (filterStatus === 'untested') {
+        filtered = filtered.filter(s => !s.testStatus || s.testStatus === null);
+      }
+
+      // Apply sort
+      if (sortBy === 'name') {
+        filtered.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sortBy === 'recent') {
+        filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      }
+
+      if (filtered.length === 0) {
+        document.getElementById('projectsList').innerHTML = '<div class="empty-state">No hay proyectos con ese filtro</div>';
+        return;
+      }
+
+      document.getElementById('projectsList').innerHTML = filtered.map(s => {
+        const sc = s.testStatus === 'success' ? 'green' : s.testStatus === 'failed' ? 'red' : 'gray';
+        return `<div class="project-card">
+          <div class="project-card-icon">&#128193;</div>
+          <div class="project-card-info">
+            <h3><span class="status-dot ${sc}${sc === 'green' ? ' pulse' : ''}"></span>${s.name}</h3>
+            <div class="project-card-meta">
+              <span>${s.host}:${s.port}</span>
+              <span class="protocol-badge">${s.protocol}</span>
+              <span>${s.basePath}</span>
+            </div>
+          </div>
+          <div class="project-card-actions">
+            <a href="/explorer?siteId=${s.id}" class="btn btn-primary btn-small">&#128193; Explorar</a>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  </script>
+</body>
+</html>

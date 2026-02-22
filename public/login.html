@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Login - FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="auth-container fade-in">
+    <a href="/" class="back-to-home">&#8592; Volver al inicio</a>
+    <div class="auth-logo">&#128268;</div>
+    <div class="auth-card">
+      <h2>Iniciar Sesion</h2>
+      <p class="subtitle">Accede a tu panel de FTP MCP Server Open</p>
+
+      <div id="alert" class="alert alert-error"></div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" placeholder="tu@email.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Contrasena</label>
+          <input type="password" id="password" placeholder="Tu contrasena" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submitBtn">Iniciar Sesion</button>
+      </form>
+
+      <div class="auth-link">
+        No tienes cuenta? <a href="/register">Registrate aqui</a>
+      </div>
+
+      <div class="forgot-password">
+        <a onclick="toggleForgot()">Olvidaste tu contrasena?</a>
+      </div>
+      <div id="forgotInfo" class="forgot-info">
+        Contacta al administrador del sistema para restablecer tu contrasena.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const alertEl = document.getElementById('alert');
+    const submitBtn = document.getElementById('submitBtn');
+
+    function toggleForgot() {
+      const el = document.getElementById('forgotInfo');
+      el.style.display = el.style.display === 'block' ? 'none' : 'block';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      alertEl.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Iniciando sesion...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            email: document.getElementById('email').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          alertEl.textContent = data.error || 'Error al iniciar sesion';
+          alertEl.style.display = 'block';
+          return;
+        }
+
+        window.location.href = '/dashboard';
+      } catch (err) {
+        alertEl.textContent = 'Error de conexion. Intenta de nuevo.';
+        alertEl.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Iniciar Sesion';
+      }
+    });
+
+    // Si ya tiene sesion, redirigir
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => { if (r.ok) window.location.href = '/dashboard'; })
+      .catch(() => {});
+  </script>
+</body>
+</html>

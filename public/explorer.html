@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Explorador - FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-content">
+      <header class="app-header">
+        <div class="app-header-left">
+          <a href="/dashboard" class="app-header-logo">
+            <span class="logo-icon">&#128268;</span>
+            <span>FTP MCP Open</span>
+          </a>
+          <nav class="app-header-nav"></nav>
+        </div>
+        <div class="app-header-right"></div>
+      </header>
+      <div class="page-content fade-in" style="padding-bottom:8px;">
+
+        <div class="explorer-layout">
+          <!-- Tree panel -->
+          <div class="explorer-tree">
+            <div class="explorer-tree-header">
+              <select id="siteSelect" onchange="onSiteChange()">
+                <option value="">Seleccionar sitio...</option>
+              </select>
+              <div class="explorer-tree-actions">
+                <button onclick="createNewFile()" title="Nuevo archivo">&#128196;+</button>
+                <button onclick="createNewFolder()" title="Nueva carpeta">&#128194;+</button>
+                <button onclick="toggleSearch()" title="Buscar archivos" id="searchToggle">&#128269;</button>
+                <button onclick="refreshTree()" title="Recargar">&#8635;</button>
+              </div>
+            </div>
+            <div class="explorer-search" id="searchPanel" style="display:none;">
+              <input type="text" id="searchInput" placeholder="Buscar archivos..." onkeyup="handleSearchKeyup(event)">
+              <button onclick="performSearch()">Buscar</button>
+            </div>
+            <div class="tree-content" id="treeContent">
+              <div class="empty-state" style="padding:20px;font-size:13px;">Selecciona un sitio para explorar</div>
+            </div>
+          </div>
+
+          <!-- Editor panel -->
+          <div class="explorer-editor">
+            <div class="editor-header" id="editorHeader" style="display:none;">
+              <div class="editor-file-path" id="editorFilePath"></div>
+              <div class="editor-actions">
+                <span class="editor-status" id="editorStatus"></span>
+                <button class="btn btn-primary btn-small" onclick="saveFile()">&#128190; Guardar</button>
+              </div>
+            </div>
+            <div class="editor-area" id="editorArea">
+              <div class="editor-placeholder">
+                <div class="placeholder-icon">&#128196;</div>
+                <div>Selecciona un archivo para ver su contenido</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal nuevo archivo/carpeta -->
+  <div class="modal-overlay" id="newItemModal" style="display:none;">
+    <div class="modal">
+      <h3 id="newItemTitle">Nuevo Archivo</h3>
+      <div class="form-group">
+        <label for="newItemName">Nombre</label>
+        <input type="text" id="newItemName" placeholder="nombre.txt" required>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('newItemModal')">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmNewItem()">Crear</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    let currentSiteId = null;
+    let currentFilePath = null;
+    let treeState = new Map(); // path -> { expanded, children, loaded }
+    let fileModified = false;
+    let newItemType = 'file';
+    let currentTreePath = '.';
+
+    (async () => {
+      const user = await checkAuth();
+      if (!user) return;
+      initTopNav('explorer');
+      initHeaderUser(user);
+
+      // Load sites
+      const data = await api('GET', '/api/sites');
+      const sites = data.sites || [];
+      const sel = document.getElementById('siteSelect');
+      sites.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name + ' (' + s.host + ')';
+        sel.appendChild(opt);
+      });
+
+      // Auto-select from URL
+      const params = new URLSearchParams(window.location.search);
+      const siteId = params.get('siteId');
+      if (siteId) {
+        sel.value = siteId;
+        onSiteChange();
+      }
+
+      // Ctrl+S shortcut
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+          e.preventDefault();
+          if (currentFilePath) saveFile();
+        }
+      });
+    })();
+
+    async function onSiteChange() {
+      const siteId = document.getElementById('siteSelect').value;
+      if (!siteId) return;
+      currentSiteId = siteId;
+      treeState.clear();
+      currentFilePath = null;
+      showEditorPlaceholder();
+      await loadTreeNode('.');
+    }
+
+    async function refreshTree() {
+      if (!currentSiteId) return;
+      treeState.clear();
+      await loadTreeNode('.');
+    }
+
+    async function loadTreeNode(path) {
+      if (!currentSiteId) return;
+      try {
+        const tc = document.getElementById('treeContent');
+        if (path === '.') tc.innerHTML = '<div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line short"></div>';
+
+        const data = await api('GET', '/api/files/' + currentSiteId + '/list?path=' + encodeURIComponent(path));
+        const entries = data.entries || [];
+
+        // Sort: directories first, then files
+        entries.sort((a, b) => {
+          if (a.type === 'directory' && b.type !== 'directory') return -1;
+          if (a.type !== 'directory' && b.type === 'directory') return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        treeState.set(path, { expanded: true, children: entries, loaded: true });
+        renderTree();
+      } catch (e) {
+        document.getElementById('treeContent').innerHTML = '<div class="empty-state" style="padding:20px;font-size:13px;">Error al cargar directorio</div>';
+      }
+    }
+
+    function renderTree() {
+      const html = renderTreeLevel('.', 0);
+      document.getElementById('treeContent').innerHTML = html || '<div class="empty-state" style="padding:20px;font-size:13px;">Directorio vacio</div>';
+    }
+
+    function renderTreeLevel(path, depth) {
+      const node = treeState.get(path);
+      if (!node || !node.children) return '';
+
+      return node.children.map(entry => {
+        const entryPath = path === '.' ? entry.name : path + '/' + entry.name;
+        const isDir = entry.type === 'directory';
+        const isSelected = currentFilePath === entryPath;
+        const childNode = treeState.get(entryPath);
+        const isExpanded = childNode?.expanded;
+        const indent = depth * 16;
+
+        let icon = isDir ? '&#128194;' : '&#128196;';
+        // File type icons
+        if (!isDir) {
+          const ext = entry.name.split('.').pop()?.toLowerCase();
+          if (['js','ts','jsx','tsx'].includes(ext)) icon = '&#128312;';
+          else if (['html','htm'].includes(ext)) icon = '&#127760;';
+          else if (['css','scss','sass','less'].includes(ext)) icon = '&#127912;';
+          else if (['php'].includes(ext)) icon = '&#128302;';
+          else if (['json','yml','yaml','xml'].includes(ext)) icon = '&#128203;';
+          else if (['md','txt'].includes(ext)) icon = '&#128196;';
+          else if (['sql'].includes(ext)) icon = '&#128451;';
+          else if (['env','ini','conf'].includes(ext)) icon = '&#9881;';
+        }
+
+        let html = `<div class="tree-item${isSelected ? ' selected' : ''}" style="padding-left:${12 + indent}px;" onclick="${isDir ? `toggleFolder('${entryPath}')` : `selectFile('${entryPath}')`}">`;
+        html += `<span class="tree-arrow ${isDir ? (isExpanded ? 'expanded' : '') : 'hidden'}">&#9654;</span>`;
+        html += `<span class="tree-icon">${icon}</span>`;
+        html += `<span class="tree-label">${entry.name}</span>`;
+        html += `<span class="tree-actions">`;
+        html += `<button onclick="event.stopPropagation();renameItem('${entryPath}')" title="Renombrar">&#9999;</button>`;
+        html += `<button onclick="event.stopPropagation();deleteItem('${entryPath}','${isDir ? 'directory' : 'file'}')" title="Eliminar">&#128465;</button>`;
+        html += `</span></div>`;
+
+        if (isDir && isExpanded && childNode?.children) {
+          html += renderTreeLevel(entryPath, depth + 1);
+        }
+        return html;
+      }).join('');
+    }
+
+    async function toggleFolder(path) {
+      const node = treeState.get(path);
+      if (node?.expanded) {
+        node.expanded = false;
+        renderTree();
+      } else if (node?.loaded) {
+        node.expanded = true;
+        renderTree();
+      } else {
+        await loadTreeNode(path);
+      }
+      currentTreePath = path;
+    }
+
+    async function selectFile(path) {
+      if (fileModified) {
+        confirmDialog(
+          'Tienes cambios sin guardar. Si continuas, se perderan los cambios.',
+          () => { loadFile(path); },
+          { title: 'Cambios sin guardar', confirmText: 'Continuar', danger: true }
+        );
+        return;
+      }
+      loadFile(path);
+    }
+
+    async function loadFile(path) {
+      currentFilePath = path;
+      fileModified = false;
+      renderTree();
+
+      document.getElementById('editorHeader').style.display = 'flex';
+      document.getElementById('editorFilePath').textContent = path;
+      document.getElementById('editorStatus').textContent = '';
+      document.getElementById('editorArea').innerHTML = '<div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div>';
+
+      try {
+        const data = await api('GET', '/api/files/' + currentSiteId + '/read?path=' + encodeURIComponent(path));
+        document.getElementById('editorArea').innerHTML = `<textarea id="editorTextarea" spellcheck="false" oninput="fileModified=true">${escapeHtml(data.content)}</textarea>`;
+        document.getElementById('editorStatus').textContent = formatSize(data.size) + ' · ' + data.totalLines + ' lineas';
+        document.getElementById('editorStatus').className = 'editor-status';
+      } catch (e) {
+        document.getElementById('editorArea').innerHTML = '<div class="editor-placeholder"><div class="placeholder-icon">&#9888;</div><div>Error al leer archivo</div></div>';
+      }
+    }
+
+    async function saveFile() {
+      if (!currentFilePath || !currentSiteId) return;
+      const textarea = document.getElementById('editorTextarea');
+      if (!textarea) return;
+
+      const status = document.getElementById('editorStatus');
+      status.textContent = 'Guardando...';
+      status.className = 'editor-status saving';
+
+      try {
+        await api('POST', '/api/files/' + currentSiteId + '/write', {
+          path: currentFilePath,
+          content: textarea.value,
+          createBackup: true,
+        });
+        status.textContent = 'Guardado!';
+        status.className = 'editor-status saved';
+        fileModified = false;
+        showToast('Archivo guardado', 'success', 2000);
+        setTimeout(() => { status.className = 'editor-status'; }, 2000);
+      } catch (e) {
+        status.textContent = 'Error al guardar';
+        status.className = 'editor-status';
+        showToast('Error al guardar archivo', 'error');
+      }
+    }
+
+    function showEditorPlaceholder() {
+      document.getElementById('editorHeader').style.display = 'none';
+      document.getElementById('editorArea').innerHTML = '<div class="editor-placeholder"><div class="placeholder-icon">&#128196;</div><div>Selecciona un archivo para ver su contenido</div></div>';
+    }
+
+    function createNewFile() {
+      if (!currentSiteId) { showToast('Selecciona un sitio primero', 'info'); return; }
+      newItemType = 'file';
+      document.getElementById('newItemTitle').textContent = 'Nuevo Archivo';
+      document.getElementById('newItemName').value = '';
+      document.getElementById('newItemName').placeholder = 'nombre.txt';
+      openModal('newItemModal');
+    }
+
+    function createNewFolder() {
+      if (!currentSiteId) { showToast('Selecciona un sitio primero', 'info'); return; }
+      newItemType = 'folder';
+      document.getElementById('newItemTitle').textContent = 'Nueva Carpeta';
+      document.getElementById('newItemName').value = '';
+      document.getElementById('newItemName').placeholder = 'nombre-carpeta';
+      openModal('newItemModal');
+    }
+
+    async function confirmNewItem() {
+      const name = document.getElementById('newItemName').value.trim();
+      if (!name) { showToast('Ingresa un nombre', 'error'); return; }
+
+      const basePath = currentTreePath === '.' ? name : currentTreePath + '/' + name;
+      try {
+        if (newItemType === 'folder') {
+          await api('POST', '/api/files/' + currentSiteId + '/mkdir', { path: basePath });
+          showToast('Carpeta creada', 'success');
+        } else {
+          await api('POST', '/api/files/' + currentSiteId + '/write', { path: basePath, content: '' });
+          showToast('Archivo creado', 'success');
+        }
+        closeModal('newItemModal');
+        await refreshTree();
+      } catch (e) { showToast(e.error || 'Error al crear', 'error'); }
+    }
+
+    async function deleteItem(path, type) {
+      confirmDialog(
+        'Se eliminara "' + path + '". Esta accion no se puede deshacer.',
+        async () => {
+          try {
+            await api('DELETE', '/api/files/' + currentSiteId + '/delete?path=' + encodeURIComponent(path));
+            showToast('Eliminado', 'success');
+            if (currentFilePath === path) showEditorPlaceholder();
+            await refreshTree();
+          } catch (e) { showToast(e.error || 'Error al eliminar', 'error'); }
+        },
+        { title: 'Eliminar ' + (type === 'directory' ? 'carpeta' : 'archivo'), confirmText: 'Eliminar', danger: true }
+      );
+    }
+
+    async function renameItem(path) {
+      const currentName = path.split('/').pop();
+      promptDialog(
+        'Ingresa el nuevo nombre:',
+        currentName,
+        async (newName) => {
+          if (newName === currentName) return;
+          const dir = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : '.';
+          const newPath = dir === '.' ? newName : dir + '/' + newName;
+          try {
+            await api('POST', '/api/files/' + currentSiteId + '/rename', { oldPath: path, newPath });
+            showToast('Renombrado', 'success');
+            if (currentFilePath === path) {
+              currentFilePath = newPath;
+              document.getElementById('editorFilePath').textContent = newPath;
+            }
+            await refreshTree();
+          } catch (e) { showToast(e.error || 'Error al renombrar', 'error'); }
+        },
+        { title: 'Renombrar', confirmText: 'Renombrar' }
+      );
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function toggleSearch() {
+      const panel = document.getElementById('searchPanel');
+      const isVisible = panel.style.display !== 'none';
+      panel.style.display = isVisible ? 'none' : 'flex';
+      if (!isVisible) document.getElementById('searchInput').focus();
+    }
+
+    function handleSearchKeyup(event) {
+      if (event.key === 'Enter') performSearch();
+      if (event.key === 'Escape') {
+        document.getElementById('searchPanel').style.display = 'none';
+        document.getElementById('searchInput').value = '';
+        refreshTree();
+      }
+    }
+
+    async function performSearch() {
+      if (!currentSiteId) return;
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) {
+        showToast('Ingresa un patron de busqueda', 'info');
+        return;
+      }
+
+      try {
+        document.getElementById('treeContent').innerHTML = '<div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line short"></div>';
+        const data = await api('GET', '/api/files/' + currentSiteId + '/search?path=.&pattern=' + encodeURIComponent(query) + '&maxDepth=5');
+        const files = data.files || [];
+
+        if (files.length === 0) {
+          document.getElementById('treeContent').innerHTML = '<div class="empty-state" style="padding:20px;font-size:13px;">No se encontraron archivos</div>';
+          return;
+        }
+
+        const html = files.map(f => {
+          const icon = f.type === 'directory' ? '&#128194;' : '&#128196;';
+          return `<div class="tree-item" onclick="selectFile('${f.path}')">
+            <span class="tree-arrow hidden">&#9654;</span>
+            <span class="tree-icon">${icon}</span>
+            <span class="tree-label">${f.path}</span>
+          </div>`;
+        }).join('');
+
+        document.getElementById('treeContent').innerHTML = html;
+        showToast(files.length + ' archivo(s) encontrado(s)', 'success');
+      } catch (e) {
+        showToast(e.error || 'Error al buscar', 'error');
+        document.getElementById('treeContent').innerHTML = '<div class="empty-state" style="padding:20px;font-size:13px;">Error al buscar</div>';
+      }
+    }
+  </script>
+</body>
+</html>

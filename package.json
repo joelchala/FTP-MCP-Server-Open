@@ -1,0 +1,63 @@
+{
+  "name": "ftp-mcp-server-open",
+  "version": "2.0.0-open",
+  "description": "Open source MCP Server for connecting AI models (Claude, etc.) to remote FTP/SFTP servers. Supports stdio and HTTP transport with web panel, OAuth 2.0 + PKCE, and file management.",
+  "author": "Joel Chala",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ftp-mcp-server-open": "dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joelchala/FTP-MCP-Server-Open.git"
+  },
+  "homepage": "https://github.com/joelchala/FTP-MCP-Server-Open",
+  "bugs": {
+    "url": "https://github.com/joelchala/FTP-MCP-Server-Open/issues"
+  },
+  "keywords": [
+    "mcp",
+    "ftp",
+    "sftp",
+    "claude",
+    "ai",
+    "model-context-protocol",
+    "file-manager",
+    "open-source"
+  ],
+  "scripts": {
+    "postinstall": "prisma generate",
+    "build": "prisma generate && tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@prisma/client": "^6.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.0.0",
+    "@types/ssh2-sftp-client": "^9.0.6",
+    "basic-ftp": "^5.0.5",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^6.0.0",
+    "ssh2-sftp-client": "^11.0.0",
+    "typescript": "^5.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {}
+}

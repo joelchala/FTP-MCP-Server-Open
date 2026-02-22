@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">&#128268;</span>
+        <h1>FTP MCP Server Open</h1>
+      </div>
+      <nav id="nav-links">
+        <a href="/login" class="btn btn-secondary" id="btn-login">Iniciar Sesion</a>
+        <a href="/register" class="btn btn-primary" id="btn-register">Registrarse</a>
+        <a href="/dashboard" class="btn btn-primary" id="btn-dashboard" style="display:none;">Dashboard</a>
+      </nav>
+    </header>
+
+    <main class="hero">
+      <h2>Conecta cualquier IA con MCP a tus servidores FTP/SFTP</h2>
+      <p class="hero-subtitle">
+        Registra tus sitios FTP, genera credenciales OAuth y permite a cualquier LLM compatible con MCP (Claude, ChatGPT, Gemini, etc.) navegar,
+        leer y editar archivos en tus servidores remotos de forma segura.
+      </p>
+
+      <div class="features">
+        <div class="feature-card">
+          <div class="feature-icon">&#128274;</div>
+          <h3>Autenticacion segura</h3>
+          <p>Sistema propio OAuth con Client ID + Secret. Credenciales FTP encriptadas con AES-256-GCM.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128193;</div>
+          <h3>14 herramientas MCP</h3>
+          <p>Lista, lee, edita, busca, crea y elimina archivos y directorios remotos via FTP/SFTP.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#9889;</div>
+          <h3>Facil de conectar</h3>
+          <p>Genera tus credenciales, configura el conector MCP en tu IA favorita y listo.</p>
+        </div>
+      </div>
+
+      <div class="cta">
+        <a href="/register" class="btn btn-primary btn-large" id="btn-cta">Crear Cuenta Gratis</a>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>&copy; 2026 Joel Chala — FTP MCP Server Open</p>
+    </footer>
+  </div>
+
+  <script>
+    // Si ya tiene sesion, mostrar boton dashboard
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(r => {
+        if (r.ok) {
+          document.getElementById('btn-login').style.display = 'none';
+          document.getElementById('btn-register').style.display = 'none';
+          document.getElementById('btn-dashboard').style.display = 'inline-flex';
+          document.getElementById('btn-cta').href = '/dashboard';
+          document.getElementById('btn-cta').textContent = 'Ir al Dashboard';
+        }
+      })
+      .catch(() => {});
+  </script>
+</body>
+</html>

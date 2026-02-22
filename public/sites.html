@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Conexiones FTP - FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-content">
+      <header class="app-header">
+        <div class="app-header-left">
+          <a href="/dashboard" class="app-header-logo">
+            <span class="logo-icon">&#128268;</span>
+            <span>FTP MCP Open</span>
+          </a>
+          <nav class="app-header-nav"></nav>
+        </div>
+        <div class="app-header-right"></div>
+      </header>
+      <div class="page-content fade-in">
+
+        <div class="page-title">
+          Conexiones FTP/SFTP
+          <button class="btn btn-primary" onclick="openSiteModal()">&#10133; Nueva Conexion</button>
+        </div>
+
+        <div id="sitesContainer" class="sites-grid">
+          <div class="skeleton skeleton-card"></div>
+          <div class="skeleton skeleton-card"></div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal crear/editar -->
+  <div class="modal-overlay" id="siteModal" style="display:none;">
+    <div class="modal">
+      <h3 id="modalTitle">Nueva Conexion FTP</h3>
+      <form id="siteForm">
+        <input type="hidden" id="siteId">
+        <div class="form-grid">
+          <div class="form-group full-width">
+            <label for="siteName">Nombre del sitio</label>
+            <input type="text" id="siteName" placeholder="Mi servidor" required>
+          </div>
+          <div class="form-group">
+            <label for="siteHost">Host</label>
+            <input type="text" id="siteHost" placeholder="ftp.ejemplo.com" required>
+          </div>
+          <div class="form-group">
+            <label for="sitePort">Puerto</label>
+            <input type="number" id="sitePort" value="21" min="1" max="65535">
+          </div>
+          <div class="form-group">
+            <label for="siteProtocol">Protocolo</label>
+            <select id="siteProtocol" onchange="updatePort()">
+              <option value="ftp">FTP</option>
+              <option value="sftp">SFTP</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="siteUsername">Usuario</label>
+            <input type="text" id="siteUsername" placeholder="usuario" required>
+          </div>
+          <div class="form-group full-width">
+            <label for="sitePassword">Contrasena <span id="pwOptional" style="display:none;">(dejar vacio para mantener)</span></label>
+            <input type="password" id="sitePassword" placeholder="Contrasena">
+          </div>
+          <div class="form-group full-width">
+            <label for="siteBasePath">Ruta base</label>
+            <input type="text" id="siteBasePath" value="/public_html" placeholder="/public_html">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeSiteModal()">Cancelar</button>
+          <button type="button" class="btn btn-secondary" id="testBtn" onclick="testFromModal()">&#128268; Probar</button>
+          <button type="submit" class="btn btn-primary" id="saveBtn">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    let sites = [];
+    let editingId = null;
+
+    (async () => {
+      const user = await checkAuth();
+      if (!user) return;
+      initTopNav('sites');
+      initHeaderUser(user);
+      await loadSites();
+    })();
+
+    function updatePort() {
+      const proto = document.getElementById('siteProtocol').value;
+      document.getElementById('sitePort').value = proto === 'sftp' ? 22 : 21;
+    }
+
+    function openSiteModal(site) {
+      editingId = site ? site.id : null;
+      document.getElementById('modalTitle').textContent = site ? 'Editar Conexion' : 'Nueva Conexion FTP';
+      document.getElementById('siteId').value = site ? site.id : '';
+      document.getElementById('siteName').value = site ? site.name : '';
+      document.getElementById('siteHost').value = site ? site.host : '';
+      document.getElementById('sitePort').value = site ? site.port : 21;
+      document.getElementById('siteProtocol').value = site ? site.protocol : 'ftp';
+      document.getElementById('siteUsername').value = site ? site.username : '';
+      document.getElementById('sitePassword').value = '';
+      document.getElementById('siteBasePath').value = site ? site.basePath : '/public_html';
+      document.getElementById('pwOptional').style.display = site ? 'inline' : 'none';
+      document.getElementById('sitePassword').required = !site;
+      openModal('siteModal');
+    }
+
+    function closeSiteModal() {
+      closeModal('siteModal');
+      editingId = null;
+    }
+
+    async function loadSites() {
+      try {
+        const data = await api('GET', '/api/sites');
+        sites = data.sites || [];
+        renderSites();
+      } catch (e) { showToast('Error al cargar sitios', 'error'); }
+    }
+
+    function renderSites() {
+      if (sites.length === 0) {
+        document.getElementById('sitesContainer').innerHTML = '<div class="empty-state" style="grid-column:1/-1;">No tienes conexiones FTP. Crea tu primera conexion para comenzar.</div>';
+        return;
+      }
+      document.getElementById('sitesContainer').innerHTML = sites.map(s => {
+        const sc = s.testStatus === 'success' ? 'green' : s.testStatus === 'failed' ? 'red' : 'gray';
+        return `<div class="site-card">
+          <div class="site-card-header">
+            <h3><span class="status-dot ${sc}${sc === 'green' ? ' pulse' : ''}"></span>${s.name}</h3>
+            <span class="protocol-badge">${s.protocol}</span>
+          </div>
+          <div class="site-card-meta">${s.host}:${s.port}</div>
+          <div class="site-card-meta">${s.basePath}</div>
+          <div class="site-card-meta">Ultimo test: ${s.lastTestedAt ? formatRelativeTime(s.lastTestedAt) : 'Nunca'}</div>
+          <div class="site-card-actions">
+            <button class="btn btn-secondary btn-small" onclick="testSite('${s.id}')">&#128268; Probar</button>
+            <a href="/explorer?siteId=${s.id}" class="btn btn-secondary btn-small">&#128193; Explorar</a>
+            <button class="btn btn-secondary btn-small" onclick="openSiteModal(sites.find(x=>x.id==='${s.id}'))">&#9999; Editar</button>
+            <button class="btn btn-danger btn-small" onclick="deleteSite('${s.id}','${s.name}')">&#128465;</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    document.getElementById('siteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('saveBtn');
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      try {
+        const body = {
+          name: document.getElementById('siteName').value,
+          host: document.getElementById('siteHost').value,
+          port: Number(document.getElementById('sitePort').value),
+          protocol: document.getElementById('siteProtocol').value,
+          username: document.getElementById('siteUsername').value,
+          basePath: document.getElementById('siteBasePath').value || '/public_html',
+        };
+        const pw = document.getElementById('sitePassword').value;
+        if (pw) body.password = pw;
+
+        if (editingId) {
+          await api('PUT', '/api/sites/' + editingId, body);
+          showToast('Sitio actualizado', 'success');
+        } else {
+          body.password = pw;
+          await api('POST', '/api/sites', body);
+          showToast('Sitio creado', 'success');
+        }
+        closeSiteModal();
+        await loadSites();
+      } catch (err) {
+        showToast(err.error || 'Error al guardar', 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Guardar';
+      }
+    });
+
+    async function testSite(id) {
+      const siteCard = document.querySelector(`button[onclick*="testSite('${id}')"]`);
+      const originalText = siteCard ? siteCard.innerHTML : '';
+      if (siteCard) {
+        siteCard.disabled = true;
+        siteCard.innerHTML = '&#8987; Probando...';
+      }
+      showToast('Probando conexion...', 'info');
+      try {
+        const data = await api('POST', '/api/sites/' + id + '/test');
+        showToast(data.success ? 'Conexion exitosa' : 'Error: ' + data.message, data.success ? 'success' : 'error', 4000);
+        await loadSites();
+      } catch (err) {
+        showToast(err.error || 'Error al probar', 'error');
+        if (siteCard) {
+          siteCard.disabled = false;
+          siteCard.innerHTML = originalText;
+        }
+      }
+    }
+
+    async function testFromModal() {
+      const btn = document.getElementById('testBtn');
+      btn.disabled = true; btn.textContent = 'Probando...';
+      try {
+        if (editingId) {
+          await testSite(editingId);
+        } else {
+          showToast('Guarda el sitio primero para probar', 'info');
+        }
+      } finally { btn.disabled = false; btn.textContent = '🔌 Probar'; }
+    }
+
+    async function deleteSite(id, name) {
+      confirmDialog(
+        'Se eliminara "' + name + '" y todas sus configuraciones. Esta accion no se puede deshacer.',
+        async () => {
+          try {
+            await api('DELETE', '/api/sites/' + id);
+            showToast('Sitio eliminado', 'success');
+            await loadSites();
+          } catch (err) { showToast(err.error || 'Error al eliminar', 'error'); }
+        },
+        { title: 'Eliminar sitio', confirmText: 'Eliminar', danger: true }
+      );
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Autorizar - FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .oauth-container {
+      max-width: 440px;
+      margin: 60px auto;
+      padding: 0 20px;
+    }
+    .oauth-card {
+      background: var(--card-bg, #1a1d23);
+      border: 1px solid var(--border-color, #2d3139);
+      border-radius: 16px;
+      padding: 32px;
+    }
+    .oauth-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .oauth-header .icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    .oauth-header h2 {
+      margin: 0 0 8px;
+      color: var(--text-primary, #fff);
+    }
+    .oauth-header p {
+      color: var(--text-secondary, #9ca3af);
+      font-size: 14px;
+      margin: 0;
+    }
+    .oauth-app-info {
+      background: var(--bg-secondary, #13151a);
+      border: 1px solid var(--border-color, #2d3139);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .oauth-app-info .app-name {
+      font-weight: 600;
+      color: var(--text-primary, #fff);
+      font-size: 16px;
+    }
+    .oauth-app-info .app-scope {
+      color: var(--text-secondary, #9ca3af);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .oauth-permissions {
+      margin-bottom: 20px;
+    }
+    .oauth-permissions h4 {
+      color: var(--text-primary, #fff);
+      margin: 0 0 10px;
+      font-size: 14px;
+    }
+    .perm-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      color: var(--text-secondary, #9ca3af);
+      font-size: 13px;
+    }
+    .perm-item .check {
+      color: #22c55e;
+      font-size: 16px;
+    }
+    .oauth-login-section {
+      margin-bottom: 20px;
+    }
+    .oauth-login-section h4 {
+      color: var(--text-primary, #fff);
+      margin: 0 0 12px;
+      font-size: 14px;
+    }
+    .oauth-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .oauth-actions .btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-deny {
+      background: var(--bg-secondary, #13151a);
+      color: var(--text-secondary, #9ca3af);
+      border: 1px solid var(--border-color, #2d3139) !important;
+    }
+    .btn-deny:hover {
+      background: #ef4444;
+      color: #fff;
+      border-color: #ef4444 !important;
+    }
+    .btn-authorize {
+      background: var(--primary-color, #6366f1);
+      color: #fff;
+    }
+    .btn-authorize:hover {
+      background: var(--primary-hover, #4f46e5);
+    }
+    .btn-authorize:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .logged-in-as {
+      background: var(--bg-secondary, #13151a);
+      border: 1px solid #22c55e40;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .logged-in-as .badge {
+      color: #22c55e;
+      font-weight: 600;
+    }
+    .logged-in-as .email {
+      color: var(--text-primary, #fff);
+    }
+    .switch-link {
+      margin-left: auto;
+      color: var(--primary-color, #6366f1);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    #loginSection .form-group {
+      margin-bottom: 14px;
+    }
+    #loginSection label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 13px;
+      color: var(--text-secondary, #9ca3af);
+    }
+    #loginSection input {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg-secondary, #13151a);
+      border: 1px solid var(--border-color, #2d3139);
+      border-radius: 8px;
+      color: var(--text-primary, #fff);
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    #loginSection input:focus {
+      outline: none;
+      border-color: var(--primary-color, #6366f1);
+    }
+    .error-msg {
+      background: #ef444420;
+      border: 1px solid #ef4444;
+      color: #ef4444;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="oauth-container fade-in">
+    <div class="oauth-card">
+      <div class="oauth-header">
+        <div class="icon">&#128268;</div>
+        <h2>Autorizar Acceso</h2>
+        <p>Una aplicacion solicita acceso a tu cuenta FTP MCP Server</p>
+      </div>
+
+      <div class="oauth-app-info">
+        <div class="app-name" id="appName">Claude.ai</div>
+        <div class="app-scope">Solicita acceso: <strong id="scopeDisplay">mcp</strong></div>
+      </div>
+
+      <div class="oauth-permissions">
+        <h4>Esta aplicacion podra:</h4>
+        <div class="perm-item"><span class="check">&#10003;</span> Conectarse a tus sitios FTP/SFTP</div>
+        <div class="perm-item"><span class="check">&#10003;</span> Leer, crear, editar y eliminar archivos</div>
+        <div class="perm-item"><span class="check">&#10003;</span> Navegar directorios remotos</div>
+        <div class="perm-item"><span class="check">&#10003;</span> Ejecutar operaciones de archivos via MCP</div>
+      </div>
+
+      <div id="errorMsg" class="error-msg"></div>
+
+      <!-- Si no hay sesion activa, mostrar login -->
+      <div id="loginSection" style="display:none;">
+        <div class="oauth-login-section">
+          <h4>Inicia sesion para continuar</h4>
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" placeholder="tu@email.com" required>
+          </div>
+          <div class="form-group">
+            <label for="password">Contrasena</label>
+            <input type="password" id="password" placeholder="Tu contrasena" required>
+          </div>
+        </div>
+      </div>
+
+      <!-- Si hay sesion activa -->
+      <div id="loggedInSection" style="display:none;">
+        <div class="logged-in-as">
+          <span class="badge">&#10003; Sesion activa</span>
+          <span class="email" id="userEmail"></span>
+          <span class="switch-link" onclick="showLogin()">Cambiar</span>
+        </div>
+      </div>
+
+      <div class="oauth-actions">
+        <button class="btn btn-deny" onclick="denyAccess()">Denegar</button>
+        <button class="btn btn-authorize" id="authorizeBtn" onclick="authorizeAccess()">Autorizar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Parsear parametros OAuth de la URL
+    const params = new URLSearchParams(window.location.search);
+    const oauthParams = {
+      responseType: params.get('response_type'),
+      clientId: params.get('client_id'),
+      redirectUri: params.get('redirect_uri'),
+      codeChallenge: params.get('code_challenge'),
+      codeChallengeMethod: params.get('code_challenge_method') || 'S256',
+      state: params.get('state'),
+      scope: params.get('scope') || 'mcp',
+    };
+
+    // Mostrar scope
+    document.getElementById('scopeDisplay').textContent = oauthParams.scope;
+
+    // Validar parametros requeridos
+    if (!oauthParams.responseType || !oauthParams.clientId || !oauthParams.redirectUri || !oauthParams.codeChallenge) {
+      showError('Parametros OAuth incompletos. Asegurate de acceder desde Claude.ai.');
+      document.getElementById('authorizeBtn').disabled = true;
+    }
+
+    let isLoggedIn = false;
+    let sessionUserId = null;
+
+    // Verificar si hay sesion activa
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          isLoggedIn = true;
+          sessionUserId = data.user?.id;
+          document.getElementById('userEmail').textContent = data.user?.email || '';
+          document.getElementById('loggedInSection').style.display = 'block';
+          document.getElementById('loginSection').style.display = 'none';
+        } else {
+          document.getElementById('loginSection').style.display = 'block';
+          document.getElementById('loggedInSection').style.display = 'none';
+        }
+      } catch {
+        document.getElementById('loginSection').style.display = 'block';
+      }
+    }
+
+    function showLogin() {
+      isLoggedIn = false;
+      document.getElementById('loggedInSection').style.display = 'none';
+      document.getElementById('loginSection').style.display = 'block';
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('errorMsg').style.display = 'none';
+    }
+
+    function denyAccess() {
+      // Redirigir de vuelta con error
+      if (oauthParams.redirectUri && oauthParams.state) {
+        const url = new URL(oauthParams.redirectUri);
+        url.searchParams.set('error', 'access_denied');
+        url.searchParams.set('state', oauthParams.state);
+        window.location.href = url.toString();
+      } else {
+        window.location.href = '/';
+      }
+    }
+
+    async function authorizeAccess() {
+      hideError();
+      const btn = document.getElementById('authorizeBtn');
+      btn.disabled = true;
+      btn.textContent = 'Autorizando...';
+
+      try {
+        // Si no esta logueado, hacer login primero
+        if (!isLoggedIn) {
+          const email = document.getElementById('email').value;
+          const password = document.getElementById('password').value;
+
+          if (!email || !password) {
+            showError('Ingresa tu email y contrasena');
+            btn.disabled = false;
+            btn.textContent = 'Autorizar';
+            return;
+          }
+
+          const loginRes = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ email, password }),
+          });
+
+          if (!loginRes.ok) {
+            const loginData = await loginRes.json();
+            showError(loginData.error || 'Error al iniciar sesion');
+            btn.disabled = false;
+            btn.textContent = 'Autorizar';
+            return;
+          }
+
+          isLoggedIn = true;
+        }
+
+        // Enviar autorizacion al servidor
+        const res = await fetch('/oauth/authorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            response_type: oauthParams.responseType,
+            client_id: oauthParams.clientId,
+            redirect_uri: oauthParams.redirectUri,
+            code_challenge: oauthParams.codeChallenge,
+            code_challenge_method: oauthParams.codeChallengeMethod,
+            state: oauthParams.state,
+            scope: oauthParams.scope,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError(data.error_description || data.error || 'Error al autorizar');
+          btn.disabled = false;
+          btn.textContent = 'Autorizar';
+          return;
+        }
+
+        // Redirigir con el authorization code
+        if (data.redirect_uri) {
+          window.location.href = data.redirect_uri;
+        } else {
+          showError('No se recibio la URL de redireccion');
+          btn.disabled = false;
+          btn.textContent = 'Autorizar';
+        }
+
+      } catch (err) {
+        showError('Error de conexion. Intenta de nuevo.');
+        btn.disabled = false;
+        btn.textContent = 'Autorizar';
+      }
+    }
+
+    // Permitir Enter en el form de login para autorizar
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !document.getElementById('authorizeBtn').disabled) {
+        authorizeAccess();
+      }
+    });
+
+    // Verificar sesion al cargar
+    checkSession();
+  </script>
+</body>
+</html>

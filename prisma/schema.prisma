@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String              @id @default(uuid())
+  email              String              @unique
+  name               String?
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  passwordHash       String              @map("password_hash")
+  authorizationCodes AuthorizationCode[]
+  oauthClients       OauthClient[]
+  sessions           Session[]
+  sites              Site[]
+
+  @@map("users")
+}
+
+model Site {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  name         String
+  host         String
+  port         Int       @default(21)
+  protocol     String    @default("ftp")
+  username     String
+  passwordEnc  String    @map("password_enc")
+  basePath     String    @default("/public_html") @map("base_path")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastTestedAt DateTime? @map("last_tested_at")
+  testStatus   String?   @map("test_status")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "sites_user_id_fkey")
+  @@map("sites")
+}
+
+model OauthClient {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  clientId            String    @unique @map("client_id")
+  clientSecret        String    @map("client_secret")
+  clientSecretPreview String    @map("client_secret_preview")
+  name                String    @default("Claude MCP")
+  isActive            Boolean   @default(true) @map("is_active")
+  lastUsedAt          DateTime? @map("last_used_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "oauth_clients_user_id_fkey")
+  @@map("oauth_clients")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "sessions_user_id_fkey")
+  @@map("sessions")
+}
+
+model AuthorizationCode {
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  clientId            String   @map("client_id")
+  userId              String   @map("user_id")
+  redirectUri         String   @map("redirect_uri")
+  codeChallenge       String   @map("code_challenge")
+  codeChallengeMethod String   @default("S256") @map("code_challenge_method")
+  scope               String   @default("mcp")
+  expiresAt           DateTime @map("expires_at")
+  used                Boolean  @default(false)
+  createdAt           DateTime @default(now()) @map("created_at")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([userId])
+  @@map("authorization_codes")
+}

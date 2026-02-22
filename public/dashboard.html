@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <title>Dashboard - FTP MCP Server Open</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <main class="app-content">
+      <header class="app-header">
+        <div class="app-header-left">
+          <a href="/dashboard" class="app-header-logo">
+            <span class="logo-icon">&#128268;</span>
+            <span>FTP MCP Open</span>
+          </a>
+          <nav class="app-header-nav"></nav>
+        </div>
+        <div class="app-header-right"></div>
+      </header>
+      <div class="page-content fade-in">
+
+        <div class="page-title">Dashboard</div>
+
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+          <div class="skeleton skeleton-stat"></div>
+          <div class="skeleton skeleton-stat"></div>
+          <div class="skeleton skeleton-stat"></div>
+          <div class="skeleton skeleton-stat"></div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+          <a href="/sites" class="quick-action-btn">&#10133; Nuevo Sitio</a>
+          <a href="/explorer" class="quick-action-btn">&#128193; Explorar Archivos</a>
+          <a href="/connect" class="quick-action-btn">&#129302; Conectar IA MCP</a>
+        </div>
+
+        <!-- Conexiones Recientes -->
+        <div class="card">
+          <div class="card-header"><h2>Conexiones Recientes</h2></div>
+          <div id="recentSites" class="sites-list">
+            <div class="skeleton skeleton-line"></div>
+            <div class="skeleton skeleton-line"></div>
+            <div class="skeleton skeleton-line short"></div>
+          </div>
+        </div>
+
+        <!-- MCP Status -->
+        <div class="card" style="margin-top:20px;">
+          <div class="card-header"><h2>&#129302; Conectores MCP</h2></div>
+          <div id="mcpStatus">
+            <div class="skeleton skeleton-line"></div>
+            <div class="skeleton skeleton-line short"></div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+  <script src="/js/app.js"></script>
+  <script>
+    (async () => {
+      const user = await checkAuth();
+      if (!user) return;
+      initTopNav('dashboard');
+      initHeaderUser(user);
+
+      const [sitesRes, oauthRes, healthRes] = await Promise.allSettled([
+        api('GET', '/api/sites'),
+        api('GET', '/api/oauth/clients'),
+        api('GET', '/health'),
+      ]);
+
+      const sites = sitesRes.status === 'fulfilled' ? sitesRes.value.sites || [] : [];
+      const oauth = oauthRes.status === 'fulfilled' ? oauthRes.value.clients || [] : [];
+      const health = healthRes.status === 'fulfilled';
+
+      const activeOauth = oauth.filter(c => c.isActive).length;
+      document.getElementById('statsGrid').innerHTML = `
+        <div class="stat-card"><div class="stat-label">Sitios FTP</div><div class="stat-value">${sites.length}</div><div class="stat-detail">${sites.filter(s => s.testStatus === 'success').length} conectados</div></div>
+        <div class="stat-card"><div class="stat-label">Credenciales OAuth</div><div class="stat-value">${activeOauth}</div><div class="stat-detail">${activeOauth > 0 ? 'Activas' : 'Sin credenciales'}</div></div>
+        <div class="stat-card"><div class="stat-label">Servidor MCP</div><div class="stat-value"><span class="status-dot ${health ? 'green pulse' : 'red'}"></span>${health ? 'Activo' : 'Inactivo'}</div><div class="stat-detail">v2.0.0-open</div></div>`;
+
+      const recentSites = sites.slice(0, 3);
+      if (recentSites.length === 0) {
+        document.getElementById('recentSites').innerHTML = '<div class="empty-state">No tienes sitios FTP. <a href="/sites">Agrega uno</a></div>';
+      } else {
+        document.getElementById('recentSites').innerHTML = recentSites.map(s => {
+          const sc = s.testStatus === 'success' ? 'green' : s.testStatus === 'failed' ? 'red' : 'gray';
+          return `<a href="/explorer?siteId=${s.id}" style="text-decoration:none;color:inherit;"><div class="site-item" style="cursor:pointer;"><div class="site-info"><h3><span class="status-dot ${sc}"></span>${s.name}</h3><p>${s.host}:${s.port} · ${s.protocol.toUpperCase()} · ${s.basePath}</p></div></div></a>`;
+        }).join('');
+      }
+
+      const activeClients = oauth.filter(c => c.isActive);
+      if (activeClients.length > 0) {
+        const latest = activeClients[0];
+        document.getElementById('mcpStatus').innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span class="status-badge success"><span class="status-dot green pulse"></span>Conectado</span>
+            <span class="text-muted" style="font-size:13px;">Client ID: <code class="text-mono text-accent">${latest.clientId}</code></span>
+          </div>
+          <div class="text-muted" style="font-size:13px;margin-top:8px;">Ultimo uso: ${formatRelativeTime(latest.lastUsedAt)}</div>`;
+      } else {
+        document.getElementById('mcpStatus').innerHTML = `
+          <div class="status-badge warning"><span class="status-dot yellow"></span>Sin credenciales</div>
+          <p class="text-muted" style="margin-top:8px;font-size:13px;">Genera credenciales OAuth para conectar con tu IA compatible MCP</p>
+          <a href="/connect" class="btn btn-primary btn-small" style="margin-top:12px;">Conectar IA MCP</a>`;
+      }
+    })();
+  </script>
+</body>
+</html>
