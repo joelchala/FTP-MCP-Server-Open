@@ -6,6 +6,18 @@ Open source MCP Server for connecting AI models (Claude, ChatGPT, Gemini, etc.) 
 **Version**: 2.0.0-open
 **License**: MIT
 
+---
+
+## FTP MCP Server — Version de pago (Online)
+
+Existe una version de pago con funcionalidades optimizadas disponible en:
+
+**[https://ftpmcpserver.site](https://ftpmcpserver.site)**
+
+La version online de **FTP MCP Server** comparte el mismo codigo base que esta version open source, pero incluye modificaciones especificas para no interferir con la entropia del sistema y ofrecer una experiencia mas fluida en produccion. Si buscas una solucion lista para usar sin necesidad de configurar tu propio servidor, la version de pago es la opcion ideal.
+
+---
+
 ## Features
 
 - **14 MCP Tools** — List, read, write, search, create, delete, and rename files and directories via FTP/SFTP
