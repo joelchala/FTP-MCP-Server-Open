@@ -8,12 +8,12 @@
 
 import { Router } from "express";
 import { randomBytes, createHash } from "node:crypto";
-import { getDatabase } from "../config/database.js";
+import { getDatabase, withDbRecovery } from "../config/database.js";
 import {
   generateClientId, generateClientSecret,
   hashClientSecret, verifyClientSecret, getSecretPreview,
 } from "../auth/oauth-credentials.js";
-import { signMcpToken } from "../middleware/auth.mcp.js";
+import { signMcpToken, ACCESS_TOKEN_LIFETIME_SECONDS } from "../middleware/auth.mcp.js";
 import { validateSession } from "../auth/session.js";
 import { logToStderr } from "../services/file.utils.js";
 
@@ -40,15 +40,17 @@ oauthRoutes.post("/clients", async (req, res) => {
     const clientSecretHash = await hashClientSecret(clientSecretRaw);
     const preview = getSecretPreview(clientSecretRaw);
 
-    const oauthClient = await db.oauthClient.create({
-      data: {
-        userId,
-        clientId,
-        clientSecret: clientSecretHash,
-        clientSecretPreview: preview,
-        name,
-      },
-    });
+    const oauthClient = await withDbRecovery(() =>
+      db.oauthClient.create({
+        data: {
+          userId,
+          clientId,
+          clientSecret: clientSecretHash,
+          clientSecretPreview: preview,
+          name,
+        },
+      })
+    );
 
     logToStderr(`[OAUTH] Credenciales creadas para usuario ${userId}: ${clientId}`);
 
@@ -71,14 +73,16 @@ oauthRoutes.get("/clients", async (req, res) => {
     if (!userId) { res.status(401).json({ error: "No autenticado" }); return; }
 
     const db = getDatabase();
-    const clients = await db.oauthClient.findMany({
-      where: { userId },
-      select: {
-        id: true, clientId: true, clientSecretPreview: true,
-        name: true, isActive: true, lastUsedAt: true, createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const clients = await withDbRecovery(() =>
+      db.oauthClient.findMany({
+        where: { userId },
+        select: {
+          id: true, clientId: true, clientSecretPreview: true,
+          name: true, isActive: true, lastUsedAt: true, createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    );
 
     res.json({ clients });
   } catch (error) {
@@ -94,18 +98,22 @@ oauthRoutes.delete("/clients/:id", async (req, res) => {
     if (!userId) { res.status(401).json({ error: "No autenticado" }); return; }
 
     const db = getDatabase();
-    const client = await db.oauthClient.findFirst({
-      where: { id: req.params.id, userId },
-    });
+    const client = await withDbRecovery(() =>
+      db.oauthClient.findFirst({
+        where: { id: req.params.id, userId },
+      })
+    );
     if (!client) {
       res.status(404).json({ error: "Credenciales no encontradas" });
       return;
     }
 
-    await db.oauthClient.update({
-      where: { id: client.id },
-      data: { isActive: false },
-    });
+    await withDbRecovery(() =>
+      db.oauthClient.update({
+        where: { id: client.id },
+        data: { isActive: false },
+      })
+    );
 
     logToStderr(`[OAUTH] Credenciales revocadas: ${client.clientId}`);
     res.json({ message: "Credenciales revocadas correctamente" });
@@ -179,19 +187,21 @@ oauthTokenRouter.post("/authorize", async (req, res) => {
 
     const db = getDatabase();
 
-    // Guardar en BD
-    await db.authorizationCode.create({
-      data: {
-        code,
-        clientId: client_id,
-        userId,
-        redirectUri: redirect_uri,
-        codeChallenge: code_challenge,
-        codeChallengeMethod: code_challenge_method || "S256",
-        scope: scope || "mcp",
-        expiresAt,
-      },
-    });
+    // Guardar en BD (con auto-recovery)
+    await withDbRecovery(() =>
+      db.authorizationCode.create({
+        data: {
+          code,
+          clientId: client_id,
+          userId,
+          redirectUri: redirect_uri,
+          codeChallenge: code_challenge,
+          codeChallengeMethod: code_challenge_method || "S256",
+          scope: scope || "mcp",
+          expiresAt,
+        },
+      })
+    );
 
     logToStderr(`[OAUTH] Authorization code generado para usuario ${userId}, client: ${client_id}`);
 
@@ -269,11 +279,13 @@ async function handleAuthorizationCodeGrant(
 
   const db = getDatabase();
 
-  // Buscar el authorization code
-  const authCode = await db.authorizationCode.findUnique({
-    where: { code },
-    include: { user: true },
-  });
+  // Buscar el authorization code (con auto-recovery)
+  const authCode = await withDbRecovery(() =>
+    db.authorizationCode.findUnique({
+      where: { code },
+      include: { user: true },
+    })
+  );
 
   if (!authCode) {
     logToStderr(`[OAUTH] Authorization code no encontrado`);
@@ -338,11 +350,13 @@ async function handleAuthorizationCodeGrant(
     return;
   }
 
-  // Marcar code como usado
-  await db.authorizationCode.update({
-    where: { id: authCode.id },
-    data: { used: true },
-  });
+  // Marcar code como usado (con auto-recovery)
+  await withDbRecovery(() =>
+    db.authorizationCode.update({
+      where: { id: authCode.id },
+      data: { used: true },
+    })
+  );
 
   // Emitir JWT de acceso
   const accessToken = signMcpToken(authCode.userId, authCode.clientId);
@@ -352,7 +366,7 @@ async function handleAuthorizationCodeGrant(
   res.json({
     access_token: accessToken,
     token_type: "Bearer",
-    expires_in: 3600,
+    expires_in: ACCESS_TOKEN_LIFETIME_SECONDS,
     scope: authCode.scope,
   });
 }
@@ -376,10 +390,12 @@ async function handleClientCredentialsGrant(
   }
 
   const db = getDatabase();
-  const oauthClient = await db.oauthClient.findUnique({
-    where: { clientId },
-    include: { user: true },
-  });
+  const oauthClient = await withDbRecovery(() =>
+    db.oauthClient.findUnique({
+      where: { clientId },
+      include: { user: true },
+    })
+  );
 
   if (!oauthClient || !oauthClient.isActive) {
     logToStderr(`[OAUTH] Cliente no encontrado o inactivo: ${clientId}`);
@@ -400,10 +416,12 @@ async function handleClientCredentialsGrant(
     return;
   }
 
-  await db.oauthClient.update({
-    where: { id: oauthClient.id },
-    data: { lastUsedAt: new Date() },
-  }).catch(() => {});
+  await withDbRecovery(() =>
+    db.oauthClient.update({
+      where: { id: oauthClient.id },
+      data: { lastUsedAt: new Date() },
+    })
+  ).catch(() => {});
 
   const accessToken = signMcpToken(oauthClient.user.id, oauthClient.clientId);
 
@@ -412,6 +430,6 @@ async function handleClientCredentialsGrant(
   res.json({
     access_token: accessToken,
     token_type: "Bearer",
-    expires_in: 3600,
+    expires_in: ACCESS_TOKEN_LIFETIME_SECONDS,
   });
 }

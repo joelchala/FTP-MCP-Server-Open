@@ -10,7 +10,7 @@ import type { Express, Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { verifyMcpToken } from "../middleware/auth.mcp.js";
-import { getDatabase } from "../config/database.js";
+import { getDatabase, withDbRecovery } from "../config/database.js";
 import { SERVER_NAME, SERVER_VERSION } from "../constants.js";
 import { registerConnectionTools } from "../tools/connection.tools.js";
 import { registerNavigationTools } from "../tools/navigation.tools.js";
@@ -43,6 +43,11 @@ export function configureMcpEndpoint(app: Express): void {
   const handleMcpRequest = async (req: Request, res: Response): Promise<void> => {
     logToStderr(`[MCP] === Request entrante: ${req.method} /mcp ===`);
 
+    // --- FASE 1: Autenticacion (errores aqui → 401) ---
+    let user: { id: string; email: string };
+    let token: string;
+    let clientId: string;
+
     try {
       // Extraer Bearer token
       const authHeader = req.headers.authorization;
@@ -56,35 +61,61 @@ export function configureMcpEndpoint(app: Express): void {
         return;
       }
 
-      const token = authHeader.slice(7);
+      token = authHeader.slice(7);
       logToStderr(`[MCP] Bearer token recibido (longitud: ${token.length})`);
 
       // Verificar JWT con nuestra clave propia
       const payload = verifyMcpToken(token);
-      logToStderr(`[MCP] JWT verificado — userId: ${payload.sub}, clientId: ${payload.clientId}`);
+      clientId = payload.clientId;
+      logToStderr(`[MCP] JWT verificado — userId: ${payload.sub}, clientId: ${clientId}`);
 
-      // Verificar que el usuario y cliente OAuth existan
-      const db = getDatabase();
-      const oauthClient = await db.oauthClient.findFirst({
-        where: { clientId: payload.clientId, isActive: true },
-        include: { user: true },
+      // Verificar que el usuario y cliente OAuth existan (con auto-recovery ante Prisma panic)
+      const oauthClient = await withDbRecovery(() => {
+        const db = getDatabase();
+        return db.oauthClient.findFirst({
+          where: { clientId, isActive: true },
+          include: { user: true },
+        });
       });
 
       if (!oauthClient) {
-        logToStderr(`[MCP] Cliente OAuth no encontrado o inactivo: ${payload.clientId}`);
+        logToStderr(`[MCP] Cliente OAuth no encontrado o inactivo: ${clientId}`);
         res.status(401).json({ error: "Cliente OAuth invalido o inactivo" });
         return;
       }
 
-      const user = oauthClient.user;
+      user = { id: oauthClient.user.id, email: oauthClient.user.email };
       logToStderr(`[MCP] Usuario DB — id: ${user.id}, email: ${user.email}`);
 
-      // Actualizar lastUsedAt
-      await db.oauthClient.update({
-        where: { id: oauthClient.id },
-        data: { lastUsedAt: new Date() },
+      // Actualizar lastUsedAt (con auto-recovery, no bloquear si falla)
+      await withDbRecovery(() => {
+        const db = getDatabase();
+        return db.oauthClient.update({
+          where: { id: oauthClient.id },
+          data: { lastUsedAt: new Date() },
+        });
       }).catch(() => {});
 
+    } catch (authError) {
+      // SOLO errores de autenticacion llegan aqui (JWT, DB lookup)
+      const errMsg = authError instanceof Error ? authError.message : String(authError);
+      logToStderr(`[MCP] AUTH ERROR: ${errMsg}`);
+
+      if (!res.headersSent) {
+        res.setHeader(
+          "WWW-Authenticate",
+          `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`
+        );
+        res.status(401).json({
+          error: "token_verification_failed",
+          reason: errMsg,
+        });
+      }
+      return;
+    }
+
+    // --- FASE 2: MCP Handler (errores aqui → 500, NUNCA 401) ---
+    try {
       // Crear instancia MCP para esta request (stateless)
       const server = createMcpServer();
       const transport = new StreamableHTTPServerTransport({
@@ -98,7 +129,7 @@ export function configureMcpEndpoint(app: Express): void {
       const nodeReq = req as unknown as IncomingMessage & { auth?: { token: string; clientId: string; scopes: string[]; extra?: Record<string, unknown> } };
       nodeReq.auth = {
         token,
-        clientId: payload.clientId,
+        clientId,
         scopes: ["mcp"],
         extra: {
           userId: user.id,
@@ -106,7 +137,7 @@ export function configureMcpEndpoint(app: Express): void {
         },
       };
 
-      // Manejar la request
+      // Manejar la request MCP
       await transport.handleRequest(
         nodeReq,
         res as unknown as ServerResponse,
@@ -117,26 +148,10 @@ export function configureMcpEndpoint(app: Express): void {
       transport.onclose = () => {
         server.close().catch(() => {});
       };
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
-      logToStderr(`[MCP] ERROR: ${errMsg}`);
-
-      // Si el error es de autenticacion
-      if (error instanceof Error && (
-        errMsg.includes("jwt") || errMsg.includes("token") ||
-        errMsg.includes("JWT") || errMsg.includes("invalid") ||
-        errMsg.includes("expired") || errMsg.includes("signature")
-      )) {
-        res.setHeader(
-          "WWW-Authenticate",
-          `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`
-        );
-        res.status(401).json({
-          error: "token_verification_failed",
-          reason: errMsg,
-        });
-        return;
-      }
+    } catch (mcpError) {
+      // Errores de herramientas MCP, FTP, transport — NUNCA devolver 401
+      const errMsg = mcpError instanceof Error ? mcpError.message : String(mcpError);
+      logToStderr(`[MCP] TOOL/TRANSPORT ERROR: ${errMsg}`);
 
       if (!res.headersSent) {
         const isProduction = process.env.NODE_ENV === "production";

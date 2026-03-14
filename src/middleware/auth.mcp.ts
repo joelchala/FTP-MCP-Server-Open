@@ -8,7 +8,7 @@
 
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { getDatabase } from "../config/database.js";
+import { getDatabase, withDbRecovery } from "../config/database.js";
 import { verifyClientSecret } from "../auth/oauth-credentials.js";
 import { logToStderr } from "../services/file.utils.js";
 
@@ -42,6 +42,9 @@ export function verifyMcpToken(token: string): McpTokenPayload {
   return payload;
 }
 
+// Lifetime del token de acceso MCP (8 horas — suficiente para sesiones largas de trabajo)
+export const ACCESS_TOKEN_LIFETIME_SECONDS = 8 * 60 * 60;
+
 // Emite un JWT de acceso MCP para un cliente OAuth autenticado
 export function signMcpToken(userId: string, clientId: string): string {
   const secret = getJwtSecret();
@@ -54,7 +57,7 @@ export function signMcpToken(userId: string, clientId: string): string {
     secret,
     {
       algorithm: "HS256",
-      expiresIn: "1h",
+      expiresIn: ACCESS_TOKEN_LIFETIME_SECONDS,
     }
   );
   return token;
@@ -84,11 +87,13 @@ export async function mcpAuthMiddleware(
     const payload = verifyMcpToken(token);
     logToStderr(`[AUTH-MCP] Token verificado — userId: ${payload.sub}, clientId: ${payload.clientId}`);
 
-    // Verificar que el usuario y cliente OAuth existan y esten activos
-    const db = getDatabase();
-    const oauthClient = await db.oauthClient.findFirst({
-      where: { clientId: payload.clientId, isActive: true },
-      include: { user: true },
+    // Verificar que el usuario y cliente OAuth existan y esten activos (con auto-recovery)
+    const oauthClient = await withDbRecovery(() => {
+      const db = getDatabase();
+      return db.oauthClient.findFirst({
+        where: { clientId: payload.clientId, isActive: true },
+        include: { user: true },
+      });
     });
 
     if (!oauthClient || !oauthClient.user) {
@@ -97,10 +102,13 @@ export async function mcpAuthMiddleware(
       return;
     }
 
-    // Actualizar lastUsedAt
-    await db.oauthClient.update({
-      where: { id: oauthClient.id },
-      data: { lastUsedAt: new Date() },
+    // Actualizar lastUsedAt (con auto-recovery, no bloquear si falla)
+    await withDbRecovery(() => {
+      const db = getDatabase();
+      return db.oauthClient.update({
+        where: { id: oauthClient.id },
+        data: { lastUsedAt: new Date() },
+      });
     }).catch((err) => {
       logToStderr(`[AUTH-MCP] Error actualizando lastUsedAt: ${err instanceof Error ? err.message : String(err)}`);
     });
