@@ -20,11 +20,13 @@ function getUserIdFromExtra(extra: Record<string, unknown>): string | null {
   return (extraData?.userId as string) ?? null;
 }
 
-// Registra las herramientas de gestión de sitios en el servidor MCP
-export function registerSiteTools(server: McpServer): void {
+// Registra las herramientas de gestion de sitios en el servidor MCP
+// enabledTools: si se pasa, solo registra las herramientas incluidas en el Set
+export function registerSiteTools(server: McpServer, enabledTools?: Set<string>): void {
+  const shouldRegister = (toolId: string) => !enabledTools || enabledTools.has(toolId);
 
   // Tool: ftp_list_sites — Lista los sitios FTP del usuario
-  server.tool(
+  if (shouldRegister("ftp_list_sites")) server.tool(
     "ftp_list_sites",
     "Lista los sitios FTP configurados por el usuario. Muestra ID, nombre, host y protocolo de cada sitio.",
     listSitesSchema.shape,
@@ -82,7 +84,7 @@ export function registerSiteTools(server: McpServer): void {
   );
 
   // Tool: ftp_select_site — Selecciona un sitio FTP para trabajar
-  server.tool(
+  if (shouldRegister("ftp_select_site")) server.tool(
     "ftp_select_site",
     "Selecciona un sitio FTP para las operaciones posteriores. Usa ftp_list_sites para ver los IDs disponibles.",
     selectSiteSchema.shape,

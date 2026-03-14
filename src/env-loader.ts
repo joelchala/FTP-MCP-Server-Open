@@ -15,10 +15,14 @@ try {
   const __file = fileURLToPath(import.meta.url);
   const rootDir = join(dirname(__file), "..");
   const envPath = join(rootDir, ".env");
+  const envProdPath = join(rootDir, ".env.production");
 
   if (existsSync(envPath)) {
     config({ path: envPath });
+  } else if (existsSync(envProdPath)) {
+    config({ path: envProdPath });
   }
+  // Si no existe ninguno, no hacer nada — las env vars pueden estar en process.env
 } catch {
   // Silenciar errores — las env vars pueden estar definidas en el entorno
 }

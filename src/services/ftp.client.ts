@@ -80,10 +80,20 @@ export class FtpClient implements IFileClient {
     return Buffer.concat(chunks);
   }
 
-  // Escribe contenido a un archivo remoto
+  // Escribe contenido a un archivo remoto (timeout extendido para archivos grandes)
   async write(remotePath: string, content: Buffer): Promise<void> {
-    const readable = Readable.from(content);
-    await this.client.uploadFrom(readable, remotePath);
+    // Guardar timeout original y aumentar para escritura (minimo 120s o 2x el actual)
+    const originalTimeout = (this.client.ftp as unknown as { timeout: number }).timeout;
+    const writeTimeout = Math.max(120_000, originalTimeout * 2);
+    (this.client.ftp as unknown as { timeout: number }).timeout = writeTimeout;
+
+    try {
+      const readable = Readable.from(content);
+      await this.client.uploadFrom(readable, remotePath);
+    } finally {
+      // Restaurar timeout original
+      (this.client.ftp as unknown as { timeout: number }).timeout = originalTimeout;
+    }
   }
 
   // Crea un directorio (soporta creación recursiva)

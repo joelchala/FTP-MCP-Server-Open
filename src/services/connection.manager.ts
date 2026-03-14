@@ -10,7 +10,7 @@ import type { IFileClient, ConnectionConfig, ConnectionStatus, FileEntry, FileIn
 import { FtpClient } from "./ftp.client.js";
 import { SftpFileClient } from "./sftp.client.js";
 import { sanitizePath, isPathAllowed, matchesPattern, logToStderr } from "./file.utils.js";
-import { getDatabase } from "../config/database.js";
+import { getDatabase, withDbRecovery } from "../config/database.js";
 import { decrypt } from "../config/encryption.js";
 import {
   DEFAULT_FTP_PORT,
@@ -61,6 +61,16 @@ setInterval(() => {
 // Cache de conexiones activas por siteId
 const connectionCache = new Map<string, { client: IFileClient; config: ConnectionConfig; lastUsed: number }>();
 
+// Invalida y limpia la conexion cacheada para un siteId (tras errores de conexion)
+export async function invalidateSiteConnection(siteId: string): Promise<void> {
+  const cached = connectionCache.get(siteId);
+  if (cached) {
+    try { await cached.client.disconnect(); } catch { /* ignorar */ }
+    connectionCache.delete(siteId);
+    logToStderr(`[CONN] Conexión invalidada para site ${siteId}`);
+  }
+}
+
 // Limpia conexiones inactivas cada 5 minutos
 setInterval(async () => {
   const now = Date.now();
@@ -80,8 +90,10 @@ export async function getSelectedSiteConfig(
 
   // Si no hay selección, auto-seleccionar si solo tiene un sitio
   if (!selection) {
-    const db = getDatabase();
-    const sites = await db.site.findMany({ where: { userId, isActive: true } });
+    const sites = await withDbRecovery(() => {
+      const db = getDatabase();
+      return db.site.findMany({ where: { userId, isActive: true } });
+    });
     if (sites.length === 1) {
       const site = sites[0]!;
       siteSelectionStore.set(userId, { siteId: site.id, selectedAt: Date.now() });
@@ -104,9 +116,11 @@ export async function getSelectedSiteConfig(
     return null;
   }
 
-  const db = getDatabase();
-  const site = await db.site.findFirst({
-    where: { id: selection.siteId, userId, isActive: true },
+  const site = await withDbRecovery(() => {
+    const db = getDatabase();
+    return db.site.findFirst({
+      where: { id: selection.siteId, userId, isActive: true },
+    });
   });
   if (!site) { siteSelectionStore.delete(userId); return null; }
 
@@ -128,14 +142,33 @@ export async function getConnectionForSite(
   let cached = connectionCache.get(siteId);
 
   if (cached && cached.client.isConnected()) {
-    cached.lastUsed = Date.now();
-    return new ConnectionManager(cached.client, config);
+    // Verificar que la conexion realmente funcione con un ping (list /)
+    try {
+      await Promise.race([
+        cached.client.list(config.basePath),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("health_check_timeout")), 5000)),
+      ]);
+      cached.lastUsed = Date.now();
+      return new ConnectionManager(cached.client, config);
+    } catch {
+      // Conexion muerta — limpiar y reconectar
+      logToStderr(`[CONN] Conexión cacheada muerta para site ${siteId}, reconectando...`);
+      try { await cached.client.disconnect(); } catch { /* ignorar */ }
+      connectionCache.delete(siteId);
+    }
   }
 
-  // Crear nueva conexión
+  // Si habia una conexion rota en cache, limpiarla
+  if (cached) {
+    try { await cached.client.disconnect(); } catch { /* ignorar */ }
+    connectionCache.delete(siteId);
+  }
+
+  // Crear nueva conexion
   const client = config.protocol === "sftp" ? new SftpFileClient() : new FtpClient();
   await client.connect(config);
   connectionCache.set(siteId, { client, config, lastUsed: Date.now() });
+  logToStderr(`[CONN] Nueva conexión establecida para site ${siteId}`);
   return new ConnectionManager(client, config);
 }
 

@@ -1,15 +1,15 @@
 /*
  * Archivo: navigation.tools.ts
  * Autor: Joel Chala
- * Versión: 1.0
- * Descripción: Herramientas MCP para navegación: ftp_list_directory, ftp_search_files, ftp_get_file_info
+ * Version: 2.0.0-open
+ * Descripcion: Herramientas MCP para navegacion: ftp_list_directory, ftp_search_files, ftp_get_file_info
  * Ruta: ftp-mcp-server-open/src/tools/navigation.tools.ts
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { listDirectorySchema, searchFilesSchema, getFileInfoSchema } from "../schemas/navigation.schema.js";
-import { ConnectionManager, getSelectedSiteConfig, getConnectionForSite } from "../services/connection.manager.js";
-import { getMimeType } from "../services/file.utils.js";
+import { ConnectionManager, getSelectedSiteConfig, getConnectionForSite, invalidateSiteConnection } from "../services/connection.manager.js";
+import { getMimeType, logToStderr } from "../services/file.utils.js";
 import { formatDirectoryListing, formatSearchResults, formatFileInfo } from "../helpers/format.helper.js";
 import { formatFileError, formatNotConnectedError, formatPathError } from "../helpers/error.helper.js";
 import type { FileEntry, SortOption } from "../types.js";
@@ -22,15 +22,23 @@ function getUserIdFromExtra(extra: Record<string, unknown>): string | null {
   return (extraData?.userId as string) ?? null;
 }
 
+// Resultado de obtener manager + siteId
+interface ManagerContext {
+  manager: ConnectionManager;
+  siteId: string | null;
+}
+
 // Obtiene un ConnectionManager para el contexto actual (remoto o local)
-async function getManagerForContext(extra: Record<string, unknown>): Promise<ConnectionManager | null> {
+async function getManagerForContext(extra: Record<string, unknown>): Promise<ManagerContext | null> {
   const userId = getUserIdFromExtra(extra);
   if (userId) {
     const siteConfig = await getSelectedSiteConfig(userId);
     if (!siteConfig) return null;
-    return getConnectionForSite(siteConfig.siteId, siteConfig.config);
+    const manager = await getConnectionForSite(siteConfig.siteId, siteConfig.config);
+    return { manager, siteId: siteConfig.siteId };
   }
-  return ConnectionManager.getLocalInstance();
+  const localManager = ConnectionManager.getLocalInstance();
+  return localManager ? { manager: localManager, siteId: null } : null;
 }
 
 const NO_SITE_MSG = "## ❌ No hay sitio FTP seleccionado\n- Usa `ftp_list_sites` y `ftp_select_site` primero.";
@@ -51,9 +59,29 @@ function sortEntries(entries: FileEntry[], sortBy: SortOption): FileEntry[] {
   return sorted;
 }
 
-// Maneja errores de navegación con detección de tipo
-function handleNavError(operation: string, path: string, error: unknown): string {
+// Detecta si un error es de conexion rota
+function isConnectionError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg === "NOT_CONNECTED" ||
+    msg.includes("ECONNRESET") || msg.includes("ECONNREFUSED") ||
+    msg.includes("ETIMEDOUT") || msg.includes("EPIPE") ||
+    msg.includes("socket") || msg.includes("closed") ||
+    msg.includes("timeout") || msg.includes("No response") ||
+    msg.includes("connection")
+  );
+}
+
+// Maneja errores de navegacion con deteccion de tipo + invalidacion de conexion
+async function handleNavError(operation: string, path: string, error: unknown, siteId: string | null): Promise<string> {
+  const msg = error instanceof Error ? error.message : String(error);
+
+  if (siteId && isConnectionError(error)) {
+    await invalidateSiteConnection(siteId);
+    logToStderr(`[NAV] Conexión invalidada tras error en ${operation}: ${msg}`);
+    return `## ❌ Error de conexión FTP\n\nLa conexión se perdió durante **${operation}** en \`${path}\`.\n\n**Motivo:** ${msg}\n\n> La conexión se reconectará automáticamente en el próximo intento.`;
+  }
+
   if (msg === "NOT_CONNECTED") return formatNotConnectedError();
   if (msg.startsWith("PATH_NOT_ALLOWED:")) {
     return formatPathError(msg.split(":")[1] ?? path, "La ruta está fuera del sandbox permitido");
@@ -61,20 +89,25 @@ function handleNavError(operation: string, path: string, error: unknown): string
   return formatFileError(operation, path, error);
 }
 
-// Registra todas las herramientas de navegación en el servidor MCP
-export function registerNavigationTools(server: McpServer): void {
+// Registra todas las herramientas de navegacion en el servidor MCP
+// enabledTools: si se pasa, solo registra las herramientas incluidas en el Set
+export function registerNavigationTools(server: McpServer, enabledTools?: Set<string>): void {
+  const shouldRegister = (toolId: string) => !enabledTools || enabledTools.has(toolId);
 
   // Tool: ftp_list_directory — Lista archivos y directorios
-  server.tool(
+  if (shouldRegister("ftp_list_directory")) server.tool(
     "ftp_list_directory",
     "Lista archivos y directorios en la ruta especificada. Muestra nombre, tipo, tamaño, fecha de modificación",
     listDirectorySchema.shape,
     async (params, extra) => {
+      let siteId: string | null = null;
       try {
-        const manager = await getManagerForContext(extra as unknown as Record<string, unknown>);
-        if (!manager) {
+        const ctx = await getManagerForContext(extra as unknown as Record<string, unknown>);
+        if (!ctx) {
           return { content: [{ type: "text" as const, text: NO_SITE_MSG }], isError: true };
         }
+        const { manager } = ctx;
+        siteId = ctx.siteId;
 
         const entries = await manager.list(params.path);
         let filtered = params.show_hidden ? entries : entries.filter((e) => !e.name.startsWith("."));
@@ -83,51 +116,57 @@ export function registerNavigationTools(server: McpServer): void {
 
         return { content: [{ type: "text" as const, text: formatDirectoryListing(resolvedPath, filtered) }] };
       } catch (error) {
-        return { content: [{ type: "text" as const, text: handleNavError("Listar directorio", params.path, error) }], isError: true };
+        return { content: [{ type: "text" as const, text: await handleNavError("Listar directorio", params.path, error, siteId) }], isError: true };
       }
     }
   );
 
-  // Tool: ftp_search_files — Búsqueda recursiva por patrón
-  server.tool(
+  // Tool: ftp_search_files — Busqueda recursiva por patron
+  if (shouldRegister("ftp_search_files")) server.tool(
     "ftp_search_files",
     "Busca archivos recursivamente por patrón de nombre o extensión dentro del directorio especificado",
     searchFilesSchema.shape,
     async (params, extra) => {
+      let siteId: string | null = null;
       try {
-        const manager = await getManagerForContext(extra as unknown as Record<string, unknown>);
-        if (!manager) {
+        const ctx = await getManagerForContext(extra as unknown as Record<string, unknown>);
+        if (!ctx) {
           return { content: [{ type: "text" as const, text: NO_SITE_MSG }], isError: true };
         }
+        const { manager } = ctx;
+        siteId = ctx.siteId;
 
         const results = await manager.search(params.path, params.pattern, params.max_depth, params.max_results);
         const resolvedPath = manager.resolvePath(params.path);
 
         return { content: [{ type: "text" as const, text: formatSearchResults(params.pattern, resolvedPath, results) }] };
       } catch (error) {
-        return { content: [{ type: "text" as const, text: handleNavError("Buscar archivos", params.path, error) }], isError: true };
+        return { content: [{ type: "text" as const, text: await handleNavError("Buscar archivos", params.path, error, siteId) }], isError: true };
       }
     }
   );
 
-  // Tool: ftp_get_file_info — Información detallada de un archivo
-  server.tool(
+  // Tool: ftp_get_file_info — Informacion detallada de un archivo
+  if (shouldRegister("ftp_get_file_info")) server.tool(
     "ftp_get_file_info",
     "Obtiene información detallada de un archivo: tamaño, permisos, fecha de modificación, tipo MIME estimado",
     getFileInfoSchema.shape,
     async (params, extra) => {
+      let siteId: string | null = null;
       try {
-        const manager = await getManagerForContext(extra as unknown as Record<string, unknown>);
-        if (!manager) {
+        const ctx = await getManagerForContext(extra as unknown as Record<string, unknown>);
+        if (!ctx) {
           return { content: [{ type: "text" as const, text: NO_SITE_MSG }], isError: true };
         }
+        const { manager } = ctx;
+        siteId = ctx.siteId;
 
         const info = await manager.stat(params.path);
         info.mimeType = getMimeType(params.path);
 
         return { content: [{ type: "text" as const, text: formatFileInfo(info) }] };
       } catch (error) {
-        return { content: [{ type: "text" as const, text: handleNavError("Obtener información", params.path, error) }], isError: true };
+        return { content: [{ type: "text" as const, text: await handleNavError("Obtener información", params.path, error, siteId) }], isError: true };
       }
     }
   );

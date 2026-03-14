@@ -37,10 +37,13 @@ async function getManagerForContext(extra: Record<string, unknown>): Promise<Con
 // Mensaje de error cuando no hay sitio seleccionado
 const NO_SITE_ERROR = "## ❌ No hay sitio FTP seleccionado\n- Usa `ftp_list_sites` para ver tus sitios configurados.\n- Luego usa `ftp_select_site` para seleccionar uno.";
 
-// Registra todas las herramientas de conexión en el servidor MCP
-export function registerConnectionTools(server: McpServer): void {
+// Registra todas las herramientas de conexion en el servidor MCP
+// enabledTools: si se pasa, solo registra las herramientas incluidas en el Set
+export function registerConnectionTools(server: McpServer, enabledTools?: Set<string>): void {
+  const shouldRegister = (toolId: string) => !enabledTools || enabledTools.has(toolId);
+
   // Tool: ftp_connect — Conecta al servidor FTP/SFTP
-  server.tool(
+  if (shouldRegister("ftp_connect")) server.tool(
     "ftp_connect",
     "Conecta al servidor FTP/SFTP. En modo remoto usa el sitio seleccionado; en modo local usa .env o parámetros.",
     connectSchema.shape,
@@ -88,8 +91,8 @@ export function registerConnectionTools(server: McpServer): void {
     }
   );
 
-  // Tool: ftp_disconnect — Cierra la conexión activa
-  server.tool(
+  // Tool: ftp_disconnect — Cierra la conexion activa
+  if (shouldRegister("ftp_disconnect")) server.tool(
     "ftp_disconnect",
     "Cierra la conexión activa al servidor FTP/SFTP",
     disconnectSchema.shape,
@@ -113,8 +116,8 @@ export function registerConnectionTools(server: McpServer): void {
     }
   );
 
-  // Tool: ftp_status — Muestra el estado actual de la conexión
-  server.tool(
+  // Tool: ftp_status — Muestra el estado actual de la conexion
+  if (shouldRegister("ftp_status")) server.tool(
     "ftp_status",
     "Muestra el estado actual de la conexión (conectado/desconectado, host, protocolo, ruta base)",
     statusSchema.shape,

@@ -6,11 +6,13 @@
  * Ruta: ftp-mcp-server-open/src/constants.ts
  */
 
-// Límite máximo de tamaño de archivo para lectura (por defecto 512KB)
-export const DEFAULT_MAX_FILE_SIZE = 524288;
+// Límite máximo de tamaño de archivo para lectura (por defecto 500MB)
+// Aplica en tools MCP (ftp_read_file) y en loadEnvConfig()
+// Se puede sobreescribir con la variable de entorno FTP_MAX_FILE_SIZE
+export const DEFAULT_MAX_FILE_SIZE = 500 * 1024 * 1024;
 
-// Timeout de lectura por defecto en milisegundos
-export const DEFAULT_READ_TIMEOUT = 30000;
+// Timeout de lectura por defecto en milisegundos (2 minutos)
+export const DEFAULT_READ_TIMEOUT = 120000;
 
 // Puerto por defecto para transporte HTTP
 export const DEFAULT_HTTP_PORT = 3000;
