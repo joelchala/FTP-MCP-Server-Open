@@ -22,11 +22,28 @@ La version online de **FTP MCP Server** comparte el mismo codigo base que esta v
 
 - **14 MCP Tools** — List, read, write, search, create, delete, and rename files and directories via FTP/SFTP
 - **Dual Mode** — Stdio (local CLI) and HTTP (web platform with admin panel)
-- **OAuth 2.0 + PKCE** — Secure integration with Claude.ai and other MCP clients
+- **OAuth 2.0 + PKCE** — Secure integration with Claude.ai, ChatGPT, Gemini and other MCP clients
 - **Web Admin Panel** — Dashboard, file explorer, site management, OAuth credentials
 - **SQLite by default** — Zero-configuration database, with optional MySQL support
 - **AES-256-GCM Encryption** — FTP credentials encrypted at rest
 - **FTP & SFTP** — Full support for both protocols
+- **Auto-recovery** — Automatic reconnection on FTP/DB failures with Prisma panic recovery
+- **Large file support** — Up to 500MB read limit, extended timeouts for write operations
+
+## Compatibility
+
+### Supported MCP Clients
+
+| Client | Transport | Notes |
+|--------|-----------|-------|
+| Claude Desktop | stdio | Config via `claude_desktop_config.json` |
+| Claude Code | stdio | Config via CLI `claude mcp add` |
+| Cursor | stdio | Config in editor settings |
+| Windsurf | stdio | Config in editor settings |
+| claude.ai | HTTP + OAuth PKCE | Remote MCP connector |
+| ChatGPT | HTTP + OAuth PKCE | Remote MCP connector (when available) |
+| Gemini | HTTP + OAuth PKCE | Remote MCP connector (when available) |
+| Any MCP client | stdio / HTTP | Depending on client support |
 
 ## Requirements
 
@@ -108,9 +125,11 @@ npm start
 | `FTP_PASSWORD` | FTP password (stdio mode) | - |
 | `SFTP_PRIVATE_KEY_PATH` | SSH private key path | - |
 | `FTP_BASE_PATH` | Root sandbox directory | `/public_html` |
-| `FTP_MAX_FILE_SIZE` | Max read size (bytes) | `524288` |
+| `FTP_MAX_FILE_SIZE` | Max read size (bytes) | `524288000` (500MB) |
 | `FTP_ALLOWED_EXTENSIONS` | Writable file extensions | See .env.example |
-| `FTP_READ_TIMEOUT` | Read timeout (ms) | `30000` |
+| `FTP_READ_TIMEOUT` | Read timeout (ms) | `120000` (2 min) |
+
+> **Note on large files**: `FTP_MAX_FILE_SIZE` controls the maximum file size for read operations. Write operations have no artificial limit — the only constraint comes from the FTP/SFTP server itself. Adjust these values according to your needs.
 
 ### Database Options
 
@@ -145,6 +164,11 @@ Claude.ai connects using the standard OAuth 2.0 flow with PKCE (RFC 7636):
 - `/.well-known/oauth-protected-resource` (RFC 9728)
 - `/.well-known/oauth-authorization-server` (RFC 8414)
 
+**Credential format**:
+- Client ID: `ftpmcp_` + 24 hex characters
+- Client Secret: 48 hex characters (hashed with bcrypt)
+- Access token: JWT HS256, 8h TTL
+
 ## Usage with Claude Desktop (stdio mode)
 
 ```json
@@ -178,6 +202,10 @@ claude mcp add ftp-server \
   -e FTP_BASE_PATH=/public_html \
   -- node /absolute/path/to/FTP-MCP-Server-Open/dist/index.js
 ```
+
+## Usage with Cursor / Windsurf (stdio mode)
+
+Check your editor's documentation for adding MCP servers via stdio. The configuration requires the same environment variables shown above.
 
 ## MCP Tools (14)
 
@@ -324,7 +352,7 @@ FTP-MCP-Server-Open/
       session.ts               # Session management
       protected-resource.ts    # RFC 9728/8414 OAuth discovery
     config/
-      database.ts              # Prisma client singleton
+      database.ts              # Prisma client singleton with auto-recovery
       encryption.ts            # AES-256-GCM encrypt/decrypt
     middleware/
       auth.web.ts              # Web auth middleware (sessions)
