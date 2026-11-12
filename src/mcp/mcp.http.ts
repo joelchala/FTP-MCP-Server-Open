@@ -108,7 +108,8 @@ export function configureMcpEndpoint(app: Express): void {
         );
         res.status(401).json({
           error: "token_verification_failed",
-          reason: errMsg,
+          // Detalle solo en desarrollo; en produccion va unicamente al log
+          ...(process.env.NODE_ENV === "production" ? {} : { reason: errMsg }),
         });
       }
       return;

@@ -6,6 +6,9 @@
  * Ruta: ftp-mcp-server-open/src/helpers/error.helper.ts
  */
 
+import type { Response } from "express";
+import { logToStderr } from "../services/file.utils.js";
+
 // Extrae el mensaje de un error desconocido
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -134,4 +137,21 @@ export function formatNotConnectedError(): string {
     `### Sugerencia:`,
     `- Usa \`ftp_connect\` para establecer una conexión primero`,
   ].join("\n");
+}
+
+// Responde un error de ruta Express sin filtrar detalles internos (hosts, rutas, banners)
+// El detalle completo solo va al log; al cliente un mensaje generico segun el tipo de error
+export function sendRouteError(res: Response, error: unknown, fallback: string): void {
+  const detail = getErrorMessage(error);
+  logToStderr(`[API] ${fallback}: ${detail}`);
+
+  if (detail.startsWith("PATH_NOT_ALLOWED")) {
+    res.status(403).json({ error: "Ruta no permitida" });
+  } else if (detail.startsWith("Host no permitido")) {
+    res.status(403).json({ error: detail });
+  } else if (/no existe|No such file|ENOENT/i.test(detail)) {
+    res.status(404).json({ error: "Archivo o ruta no encontrado" });
+  } else {
+    res.status(500).json({ error: fallback });
+  }
 }

@@ -14,6 +14,7 @@ import { getConnectionForSite } from "../services/connection.manager.js";
 import { DEFAULT_READ_TIMEOUT, DEFAULT_MAX_FILE_SIZE, DEFAULT_ALLOWED_EXTENSIONS } from "../constants.js";
 import { isExtensionAllowed, isRenameAllowed } from "../services/file.utils.js";
 import type { Protocol, ConnectionConfig } from "../types.js";
+import { sendRouteError } from "../helpers/error.helper.js";
 
 export const filesRoutes = Router();
 
@@ -59,7 +60,7 @@ filesRoutes.get("/:siteId/list", async (req: Request, res: Response): Promise<vo
 
     res.json({ entries, path: remotePath });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al listar directorio" });
+    sendRouteError(res, error, "Error al listar directorio");
   }
 });
 
@@ -91,7 +92,7 @@ filesRoutes.get("/:siteId/read", async (req: Request, res: Response): Promise<vo
 
     res.json({ content, size: info.size, totalLines: lines.length, path: remotePath });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al leer archivo" });
+    sendRouteError(res, error, "Error al leer archivo");
   }
 });
 
@@ -137,7 +138,7 @@ filesRoutes.post("/:siteId/write", async (req: Request, res: Response): Promise<
 
     res.json({ path: remotePath, size: buf.length, backupCreated: !!backupPath, backupPath });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al escribir archivo" });
+    sendRouteError(res, error, "Error al escribir archivo");
   }
 });
 
@@ -155,7 +156,7 @@ filesRoutes.get("/:siteId/stat", async (req: Request, res: Response): Promise<vo
 
     res.json(info);
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al obtener info" });
+    sendRouteError(res, error, "Error al obtener info");
   }
 });
 
@@ -173,7 +174,7 @@ filesRoutes.post("/:siteId/mkdir", async (req: Request, res: Response): Promise<
 
     res.json({ success: true, path: remotePath });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al crear directorio" });
+    sendRouteError(res, error, "Error al crear directorio");
   }
 });
 
@@ -199,7 +200,7 @@ async function handleDelete(req: Request, res: Response): Promise<void> {
 
     res.json({ success: true, path: remotePath });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al eliminar" });
+    sendRouteError(res, error, "Error al eliminar");
   }
 }
 
@@ -234,7 +235,7 @@ filesRoutes.post("/:siteId/rename", async (req: Request, res: Response): Promise
 
     res.json({ success: true, oldPath, newPath });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al renombrar" });
+    sendRouteError(res, error, "Error al renombrar");
   }
 });
 
@@ -254,6 +255,6 @@ filesRoutes.get("/:siteId/search", async (req: Request, res: Response): Promise<
 
     res.json({ files: results, results, pattern, path: remotePath });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error en busqueda" });
+    sendRouteError(res, error, "Error en busqueda");
   }
 });

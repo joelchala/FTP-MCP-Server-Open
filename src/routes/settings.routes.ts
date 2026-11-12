@@ -12,6 +12,7 @@ import { z } from "zod";
 import { getDatabase } from "../config/database.js";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { destroyAllSessions } from "../auth/session.js";
+import { sendRouteError } from "../helpers/error.helper.js";
 
 export const settingsRoutes = Router();
 
@@ -30,7 +31,7 @@ settingsRoutes.get("/profile", async (req: Request, res: Response): Promise<void
     if (!user) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
     res.json({ user });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error" });
+    sendRouteError(res, error, "Error");
   }
 });
 
@@ -59,7 +60,7 @@ settingsRoutes.put("/profile", async (req: Request, res: Response): Promise<void
 
     res.json({ user });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al actualizar" });
+    sendRouteError(res, error, "Error al actualizar");
   }
 });
 
@@ -100,7 +101,7 @@ settingsRoutes.put("/password", async (req: Request, res: Response): Promise<voi
 
     res.json({ message: "Contrasena actualizada correctamente" });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error al cambiar contrasena" });
+    sendRouteError(res, error, "Error al cambiar contrasena");
   }
 });
 
@@ -113,6 +114,6 @@ settingsRoutes.delete("/sessions", async (req: Request, res: Response): Promise<
     await destroyAllSessions(userId);
     res.json({ message: "Todas las sesiones han sido cerradas" });
   } catch (error) {
-    res.status(500).json({ error: error instanceof Error ? error.message : "Error" });
+    sendRouteError(res, error, "Error");
   }
 });
