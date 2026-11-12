@@ -54,14 +54,19 @@
           </div>
           <div class="form-group">
             <label for="sitePort">Puerto</label>
-            <input type="number" id="sitePort" value="21" min="1" max="65535">
+            <input type="number" id="sitePort" value="22" min="1" max="65535">
           </div>
           <div class="form-group">
             <label for="siteProtocol">Protocolo</label>
             <select id="siteProtocol" onchange="updatePort()">
-              <option value="ftp">FTP</option>
-              <option value="sftp">SFTP</option>
+              <option value="sftp">SFTP (recomendado)</option>
+              <option value="ftps">FTPS (FTP con TLS)</option>
+              <option value="ftp">FTP (sin cifrar)</option>
             </select>
+            <div id="plainFtpWarning" style="display:none;margin-top:6px;font-size:12px;color:#f59e0b;">&#9888; FTP plano envia usuario y contrasena sin cifrar. Usa SFTP o FTPS si tu servidor lo permite.</div>
+          </div>
+          <div class="form-group full-width" id="resetHostKeyRow" style="display:none;">
+            <label style="display:flex;gap:8px;align-items:center;font-weight:normal;"><input type="checkbox" id="siteResetHostKey"> Restablecer host key SFTP (marcar solo si el servidor cambio de llave legitimamente)</label>
           </div>
           <div class="form-group">
             <label for="siteUsername">Usuario</label>
@@ -102,6 +107,7 @@
     function updatePort() {
       const proto = document.getElementById('siteProtocol').value;
       document.getElementById('sitePort').value = proto === 'sftp' ? 22 : 21;
+      document.getElementById('plainFtpWarning').style.display = proto === 'ftp' ? 'block' : 'none';
     }
 
     function openSiteModal(site) {
@@ -110,8 +116,11 @@
       document.getElementById('siteId').value = site ? site.id : '';
       document.getElementById('siteName').value = site ? site.name : '';
       document.getElementById('siteHost').value = site ? site.host : '';
-      document.getElementById('sitePort').value = site ? site.port : 21;
-      document.getElementById('siteProtocol').value = site ? site.protocol : 'ftp';
+      document.getElementById('sitePort').value = site ? site.port : 22;
+      document.getElementById('siteProtocol').value = site ? site.protocol : 'sftp';
+      document.getElementById('plainFtpWarning').style.display = (site && site.protocol === 'ftp') ? 'block' : 'none';
+      document.getElementById('resetHostKeyRow').style.display = site ? 'block' : 'none';
+      document.getElementById('siteResetHostKey').checked = false;
       document.getElementById('siteUsername').value = site ? site.username : '';
       document.getElementById('sitePassword').value = '';
       document.getElementById('siteBasePath').value = site ? site.basePath : '/public_html';
@@ -175,6 +184,7 @@
         if (pw) body.password = pw;
 
         if (editingId) {
+          if (document.getElementById('siteResetHostKey').checked) body.resetHostKey = true;
           await api('PUT', '/api/sites/' + editingId, body);
           showToast('Sitio actualizado', 'success');
         } else {

@@ -14,7 +14,7 @@ export const connectSchema = z.object({
   port: z.number().int().positive().optional().describe("Puerto de conexión (usa .env si se omite)"),
   user: z.string().optional().describe("Usuario de conexión (usa .env si se omite)"),
   password: z.string().optional().describe("Contraseña de conexión (usa .env si se omite)"),
-  protocol: z.enum(["ftp", "sftp"]).optional().describe("Protocolo: ftp o sftp (usa .env si se omite)"),
+  protocol: z.enum(["ftp", "ftps", "sftp"]).optional().describe("Protocolo: sftp, ftps o ftp (usa .env si se omite)"),
 }).strict();
 
 // Esquema para ftp_disconnect (sin parámetros)

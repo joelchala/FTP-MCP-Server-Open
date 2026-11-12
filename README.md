@@ -118,7 +118,7 @@ npm start
 | `ENCRYPTION_KEY` | AES-256 hex key (64 chars) | - |
 | `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | BASE_URL |
 | `NODE_ENV` | Environment: `production` or `development` | `development` |
-| `FTP_PROTOCOL` | Protocol: `ftp` or `sftp` (stdio mode) | `sftp` |
+| `FTP_PROTOCOL` | Protocol: `sftp`, `ftps` or `ftp` (stdio mode) | `sftp` |
 | `FTP_HOST` | Server hostname (stdio mode) | `localhost` |
 | `FTP_PORT` | Connection port (stdio mode) | `22` |
 | `FTP_USER` | FTP username (stdio mode) | `anonymous` |
@@ -126,6 +126,8 @@ npm start
 | `SFTP_PRIVATE_KEY_PATH` | SSH private key path | - |
 | `FTP_BASE_PATH` | Root sandbox directory | `/public_html` |
 | `ALLOW_REGISTRATION` | Allow new sign-ups after the first user (HTTP mode) | `false` |
+| `ALLOW_INSECURE_TLS` | Accept self-signed FTPS certificates | `false` |
+| `SFTP_HOST_KEY_SHA256` | Pin the SFTP host key in stdio mode (hex SHA-256) | _(trust on first use, logged)_ |
 | `ALLOW_PRIVATE_HOSTS` | Allow sites on internal/private networks (HTTP mode) | `false` |
 | `FTP_MAX_FILE_SIZE` | Max read size (bytes) | `5242880` (5MB) |
 | `FTP_ALLOWED_EXTENSIONS` | Writable file extensions | See .env.example |
@@ -415,7 +417,9 @@ SQLite (default) or MySQL with Prisma ORM. Models:
 - **Generate your own secrets.** `ENCRYPTION_KEY` and `JWT_SECRET` are empty in `.env.example`; the server refuses placeholder values.
 - **Registration closes after the first user.** Set `ALLOW_REGISTRATION=true` to let others sign up.
 - **Internal hosts are blocked.** Sites pointing to localhost/private/link-local addresses are rejected (SSRF protection). Set `ALLOW_PRIVATE_HOSTS=true` to use a LAN FTP server.
-- **Plain FTP is unencrypted and SFTP does not pin host keys.** Prefer a trusted network or a VPN.
+- **Prefer SFTP or FTPS.** Plain FTP sends the password unencrypted (the panel warns about it). FTPS validates the server certificate; set `ALLOW_INSECURE_TLS=true` only for self-signed certificates.
+- **SFTP host keys are pinned (trust on first use).** The first fingerprint is saved per site; if it changes, the connection is refused (possible MITM). Edit the site and tick *reset host key* if the change is legitimate. In stdio mode you can pin it with `SFTP_HOST_KEY_SHA256`.
+- **Upgrading?** Run `npm run db:push` once: sites now store the SFTP host key fingerprint.
 - **Write whitelist includes `.php`, `.htaccess` and `.env` by default.** Narrow `FTP_ALLOWED_EXTENSIONS` to what you need.
 
 ## Contributing

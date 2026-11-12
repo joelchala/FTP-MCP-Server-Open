@@ -8,6 +8,7 @@
 
 import * as ftp from "basic-ftp";
 import { Writable, Readable } from "node:stream";
+import { isIP } from "node:net";
 import type { IFileClient, ConnectionConfig, FileEntry, FileInfo } from "../types.js";
 import { logToStderr } from "./file.utils.js";
 
@@ -29,8 +30,16 @@ export class FtpClient implements IFileClient {
         port: config.port,
         user: config.user,
         password: config.password ?? "",
-        secure: false,
+        // ftps = TLS explicito (puerto 990 = implicito). Valida el certificado salvo ALLOW_INSECURE_TLS=true
+        secure: config.protocol === "ftps" ? (config.port === 990 ? "implicit" : true) : false,
+        secureOptions:
+          config.protocol === "ftps"
+            ? { rejectUnauthorized: process.env.ALLOW_INSECURE_TLS !== "true", servername: isIP(config.host) ? undefined : config.host }
+            : undefined,
       });
+      if (config.protocol !== "ftps") {
+        logToStderr("[SEGURIDAD] FTP plano: usuario y contrasena viajan sin cifrar. Usa FTPS o SFTP.");
+      }
       this.connected = true;
       logToStderr(`Conectado a FTP ${config.host}:${config.port}`);
     } catch (error) {

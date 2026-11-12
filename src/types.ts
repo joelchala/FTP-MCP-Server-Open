@@ -24,6 +24,10 @@ export interface ConnectionConfig {
   privateKeyPath?: string;
   basePath: string;
   timeout: number;
+  // SFTP: huella SHA-256 (hex) de la host key. Si falta, se acepta la primera y se fija (TOFU)
+  hostKeyFingerprint?: string;
+  // Se llama la primera vez que se ve la host key para persistirla
+  onNewHostKey?: (fingerprint: string) => Promise<void> | void;
 }
 
 // Entrada de archivo/directorio en listado
@@ -112,6 +116,7 @@ export interface EnvConfig {
   user: string;
   password: string;
   privateKeyPath?: string;
+  hostKeyFingerprint?: string;
   basePath: string;
   maxFileSize: number;
   allowedExtensions: string[];

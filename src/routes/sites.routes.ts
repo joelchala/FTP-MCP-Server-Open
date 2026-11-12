@@ -15,6 +15,7 @@ import { logToStderr } from "../services/file.utils.js";
 import { FtpClient } from "../services/ftp.client.js";
 import { SftpFileClient } from "../services/sftp.client.js";
 import { assertHostAllowed } from "../services/host-guard.js";
+import { hostKeyPinning, invalidateSiteConnection } from "../services/connection.manager.js";
 import type { ConnectionConfig, Protocol } from "../types.js";
 
 export const sitesRoutes = Router();
@@ -111,7 +112,17 @@ sitesRoutes.put("/:id", async (req, res) => {
       return;
     }
 
-    const updateData: Record<string, unknown> = { ...parsed.data };
+    const { resetHostKey, ...changes } = parsed.data;
+    const updateData: Record<string, unknown> = { ...changes };
+    // Cambiar host, puerto o protocolo (o pedirlo) invalida la host key guardada
+    if (
+      resetHostKey ||
+      (changes.host !== undefined && changes.host !== existing.host) ||
+      (changes.port !== undefined && changes.port !== existing.port) ||
+      (changes.protocol !== undefined && changes.protocol !== existing.protocol)
+    ) {
+      updateData.hostKeyFingerprint = null;
+    }
     if (parsed.data.password) {
       updateData.passwordEnc = encrypt(parsed.data.password);
       delete updateData.password;
@@ -125,6 +136,9 @@ sitesRoutes.put("/:id", async (req, res) => {
         username: true, basePath: true, isActive: true, createdAt: true,
       },
     });
+
+    // Fuerza reconexion con los nuevos datos (host, credenciales, host key)
+    await invalidateSiteConnection(req.params.id);
 
     res.json({ site });
   } catch (error) {
@@ -171,6 +185,7 @@ sitesRoutes.post("/:id/test", async (req, res) => {
     const config: ConnectionConfig = {
       host: site.host, port: site.port, user: site.username, password,
       protocol: site.protocol as Protocol, basePath: site.basePath, timeout: 15000,
+      ...hostKeyPinning(site),
     };
 
     const client = site.protocol === "sftp" ? new SftpFileClient() : new FtpClient();

@@ -40,7 +40,33 @@ export class SftpFileClient implements IFileClient {
         connectConfig.password = config.password ?? "";
       }
 
-      await this.client.connect(connectConfig);
+      // Verificacion de host key (TOFU): la primera vez se fija la huella; si cambia, se rechaza
+      let mismatch = false;
+      connectConfig.hostHash = "sha256";
+      connectConfig.hostVerifier = (fingerprint: string) => {
+        const seen = fingerprint.toLowerCase();
+        if (!config.hostKeyFingerprint) {
+          logToStderr(`[SEGURIDAD] Host key SFTP nueva de ${config.host}: SHA256 ${seen}`);
+          void Promise.resolve(config.onNewHostKey?.(seen)).catch(() => {});
+          return true;
+        }
+        if (config.hostKeyFingerprint.toLowerCase() !== seen) {
+          mismatch = true;
+          return false;
+        }
+        return true;
+      };
+
+      try {
+        await this.client.connect(connectConfig);
+      } catch (error) {
+        if (mismatch) {
+          throw new Error(
+            "La host key del servidor SFTP cambio respecto a la guardada (posible ataque MITM). Si el cambio es legitimo, edita el sitio y marca restablecer host key."
+          );
+        }
+        throw error;
+      }
       this.connected = true;
       logToStderr(`Conectado a SFTP ${config.host}:${config.port}`);
     } catch (error) {

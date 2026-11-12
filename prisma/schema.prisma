@@ -37,6 +37,7 @@ model Site {
   updatedAt    DateTime  @updatedAt @map("updated_at")
   lastTestedAt DateTime? @map("last_tested_at")
   testStatus   String?   @map("test_status")
+  hostKeyFingerprint String? @map("host_key_fingerprint")
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId], map: "sites_user_id_fkey")

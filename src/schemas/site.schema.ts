@@ -12,8 +12,8 @@ import { z } from "zod";
 export const createSiteSchema = z.object({
   name: z.string().min(1).max(100).describe("Nombre descriptivo del sitio"),
   host: z.string().min(1).max(255).describe("Host del servidor FTP/SFTP"),
-  port: z.number().int().min(1).max(65535).default(21).describe("Puerto de conexión"),
-  protocol: z.enum(["ftp", "sftp"]).default("ftp").describe("Protocolo: ftp o sftp"),
+  port: z.number().int().min(1).max(65535).default(22).describe("Puerto de conexión"),
+  protocol: z.enum(["ftp", "ftps", "sftp"]).default("sftp").describe("Protocolo: sftp (recomendado), ftps o ftp (sin cifrar)"),
   username: z.string().min(1).max(100).describe("Usuario FTP"),
   password: z.string().min(1).describe("Contraseña FTP"),
   basePath: z.string().default("/public_html").describe("Ruta base en el servidor"),
@@ -24,11 +24,12 @@ export const updateSiteSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   host: z.string().min(1).max(255).optional(),
   port: z.number().int().min(1).max(65535).optional(),
-  protocol: z.enum(["ftp", "sftp"]).optional(),
+  protocol: z.enum(["ftp", "ftps", "sftp"]).optional(),
   username: z.string().min(1).max(100).optional(),
   password: z.string().min(1).optional(),
   basePath: z.string().optional(),
   isActive: z.boolean().optional(),
+  resetHostKey: z.boolean().optional().describe("Olvida la host key SFTP guardada"),
 }).strict();
 
 // Esquema para ftp_list_sites (MCP tool, sin parámetros)

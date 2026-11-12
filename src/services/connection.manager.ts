@@ -25,9 +25,22 @@ import {
 import type { Protocol } from "../types.js";
 import { assertHostAllowed } from "./host-guard.js";
 
+// Datos para fijar la host key SFTP de un sitio (TOFU) y persistirla la primera vez
+export function hostKeyPinning(site: { id: string; protocol: string; hostKeyFingerprint?: string | null }) {
+  if (site.protocol !== "sftp") return {};
+  return {
+    hostKeyFingerprint: site.hostKeyFingerprint ?? undefined,
+    onNewHostKey: async (fingerprint: string) => {
+      await withDbRecovery(() =>
+        getDatabase().site.update({ where: { id: site.id }, data: { hostKeyFingerprint: fingerprint } })
+      );
+    },
+  };
+}
+
 // Carga configuración desde variables de entorno (modo stdio/local)
 export function loadEnvConfig(): EnvConfig {
-  const protocol = (process.env.FTP_PROTOCOL ?? "sftp") as "ftp" | "sftp";
+  const protocol = (process.env.FTP_PROTOCOL ?? "sftp") as "ftp" | "ftps" | "sftp";
   return {
     protocol,
     host: process.env.FTP_HOST ?? "localhost",
@@ -35,6 +48,7 @@ export function loadEnvConfig(): EnvConfig {
     user: process.env.FTP_USER ?? "anonymous",
     password: process.env.FTP_PASSWORD ?? "",
     privateKeyPath: process.env.SFTP_PRIVATE_KEY_PATH || undefined,
+    hostKeyFingerprint: process.env.SFTP_HOST_KEY_SHA256 || undefined,
     basePath: process.env.FTP_BASE_PATH ?? DEFAULT_BASE_PATH,
     maxFileSize: Number(process.env.FTP_MAX_FILE_SIZE) || DEFAULT_MAX_FILE_SIZE,
     allowedExtensions: process.env.FTP_ALLOWED_EXTENSIONS
@@ -132,6 +146,7 @@ export async function getSelectedSiteConfig(
       host: site.host, port: site.port, user: site.username, password,
       protocol: site.protocol as Protocol, basePath: site.basePath,
       timeout: Number(process.env.FTP_READ_TIMEOUT) || DEFAULT_READ_TIMEOUT,
+      ...hostKeyPinning(site),
     },
   };
 }
@@ -209,6 +224,7 @@ export class ConnectionManager {
       host: overrides?.host ?? env.host, port: overrides?.port ?? env.port,
       user: overrides?.user ?? env.user, password: overrides?.password ?? env.password,
       protocol: overrides?.protocol ?? env.protocol, privateKeyPath: env.privateKeyPath,
+      hostKeyFingerprint: env.hostKeyFingerprint,
       basePath: overrides?.basePath ?? env.basePath, timeout: env.readTimeout,
     };
     const client = config.protocol === "sftp" ? new SftpFileClient() : new FtpClient();

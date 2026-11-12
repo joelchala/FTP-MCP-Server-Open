@@ -47,7 +47,7 @@ export const SERVER_NAME = "ftp-mcp-server-open";
 export const SERVER_VERSION = "2.0.0-open";
 
 // Protocolos soportados
-export const SUPPORTED_PROTOCOLS = ["ftp", "sftp"] as const;
+export const SUPPORTED_PROTOCOLS = ["ftp", "ftps", "sftp"] as const;
 
 // Opciones de ordenamiento para listado de directorios
 export const SORT_OPTIONS = ["name", "size", "date"] as const;
