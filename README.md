@@ -28,7 +28,7 @@ La version online de **FTP MCP Server** comparte el mismo codigo base que esta v
 - **AES-256-GCM Encryption** — FTP credentials encrypted at rest
 - **FTP & SFTP** — Full support for both protocols
 - **Auto-recovery** — Automatic reconnection on FTP/DB failures with Prisma panic recovery
-- **Large file support** — Up to 500MB read limit, extended timeouts for write operations
+- **Large file support** — Configurable read limit (default 5MB), extended timeouts for write operations
 
 ## Compatibility
 
@@ -125,7 +125,7 @@ npm start
 | `FTP_PASSWORD` | FTP password (stdio mode) | - |
 | `SFTP_PRIVATE_KEY_PATH` | SSH private key path | - |
 | `FTP_BASE_PATH` | Root sandbox directory | `/public_html` |
-| `FTP_MAX_FILE_SIZE` | Max read size (bytes) | `524288000` (500MB) |
+| `FTP_MAX_FILE_SIZE` | Max read size (bytes) | `5242880` (5MB) |
 | `FTP_ALLOWED_EXTENSIONS` | Writable file extensions | See .env.example |
 | `FTP_READ_TIMEOUT` | Read timeout (ms) | `120000` (2 min) |
 
@@ -320,7 +320,6 @@ The HTTP mode includes a full web admin panel:
 | GET | `/.well-known/oauth-protected-resource` | RFC 9728 resource metadata |
 | GET | `/.well-known/oauth-authorization-server` | RFC 8414 authorization server metadata |
 | GET | `/health` | Basic health check |
-| GET | `/debug/health` | Detailed health check |
 
 ## Project Structure
 
@@ -408,6 +407,14 @@ SQLite (default) or MySQL with Prisma ORM. Models:
 - **Helmet** — HTTP security headers with strict CSP
 - **Path traversal** — Blocked via path sanitization
 - **Cookies** — httpOnly, Secure, SameSite=Lax
+
+### Known limitations (read before exposing to the internet)
+
+- **Generate your own secrets.** `ENCRYPTION_KEY` and `JWT_SECRET` are empty in `.env.example`; the server refuses placeholder values.
+- **User registration is open.** Any visitor can create an account. Put the panel behind a VPN/reverse-proxy auth if it is public.
+- **Users can point sites to any host.** There is no block for private/internal addresses (SSRF). Do not run it on a network with sensitive internal services unless you trust all users.
+- **Plain FTP is unencrypted and SFTP does not pin host keys.** Prefer a trusted network or a VPN.
+- **Write whitelist includes `.php`, `.htaccess` and `.env` by default.** Narrow `FTP_ALLOWED_EXTENSIONS` to what you need.
 
 ## Contributing
 

@@ -43,12 +43,23 @@ export function isExtensionAllowed(filePath: string, allowed: string[]): boolean
   // Rechazar "." y ".."
   if (baseName === "." || baseName === "..") return false;
 
+  const allowedLower = allowed.map((a) => a.toLowerCase());
+
   // Archivos sin extensión como .htaccess
   if (ext === "" && baseName.startsWith(".")) {
-    return allowed.includes(baseName);
+    return allowedLower.includes(baseName.toLowerCase());
   }
 
-  return allowed.includes(ext);
+  return allowedLower.includes(ext);
+}
+
+// Un rename no puede cambiar a una extension no permitida (evita saltar la whitelist: .txt -> .phtml)
+// Si la extension no cambia (incluye directorios sin extension) se permite
+export function isRenameAllowed(oldPath: string, newPath: string, allowed: string[]): boolean {
+  const oldExt = path.posix.extname(oldPath).toLowerCase();
+  const newExt = path.posix.extname(newPath).toLowerCase();
+  if (oldExt === newExt) return true;
+  return isExtensionAllowed(newPath, allowed);
 }
 
 // Obtiene el tipo MIME estimado basado en la extensión
@@ -91,7 +102,7 @@ export function truncateByLines(
 export function matchesPattern(fileName: string, pattern: string): boolean {
   // Convertir patrón glob simple a regex
   const regexStr = pattern
-    .replace(/\./g, "\\.")
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escapa metacaracteres excepto * y ?
     .replace(/\*/g, ".*")
     .replace(/\?/g, ".");
 

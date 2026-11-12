@@ -21,9 +21,14 @@ export interface McpTokenPayload {
 
 // Obtiene la clave JWT desde env
 function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET ?? process.env.ENCRYPTION_KEY;
+  // "||" (no "??") para que un valor vacio caiga al fallback
+  const secret = process.env.JWT_SECRET || process.env.ENCRYPTION_KEY;
   if (!secret) {
     throw new Error("JWT_SECRET o ENCRYPTION_KEY no configurada");
+  }
+  // Rechaza secretos cortos o placeholders (todos los caracteres iguales)
+  if (secret.length < 32 || /^(.)\1*$/.test(secret)) {
+    throw new Error("JWT_SECRET inseguro: usa un valor aleatorio de al menos 32 caracteres");
   }
   return secret;
 }

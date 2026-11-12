@@ -12,7 +12,7 @@ import { getDatabase } from "../config/database.js";
 import { decrypt } from "../config/encryption.js";
 import { getConnectionForSite } from "../services/connection.manager.js";
 import { DEFAULT_READ_TIMEOUT, DEFAULT_MAX_FILE_SIZE, DEFAULT_ALLOWED_EXTENSIONS } from "../constants.js";
-import { isExtensionAllowed } from "../services/file.utils.js";
+import { isExtensionAllowed, isRenameAllowed } from "../services/file.utils.js";
 import type { Protocol, ConnectionConfig } from "../types.js";
 
 export const filesRoutes = Router();
@@ -218,6 +218,14 @@ filesRoutes.post("/:siteId/rename", async (req: Request, res: Response): Promise
     const { oldPath, newPath } = req.body;
     if (!oldPath || !newPath) {
       res.status(400).json({ error: "Se requieren oldPath y newPath" });
+      return;
+    }
+
+    const allowed = process.env.FTP_ALLOWED_EXTENSIONS
+      ? process.env.FTP_ALLOWED_EXTENSIONS.split(",").map((e: string) => e.trim())
+      : DEFAULT_ALLOWED_EXTENSIONS;
+    if (!isRenameAllowed(String(oldPath), String(newPath), allowed)) {
+      res.status(403).json({ error: "Extension de archivo no permitida" });
       return;
     }
 

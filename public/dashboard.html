@@ -94,7 +94,7 @@
       } else {
         document.getElementById('recentSites').innerHTML = recentSites.map(s => {
           const sc = s.testStatus === 'success' ? 'green' : s.testStatus === 'failed' ? 'red' : 'gray';
-          return `<a href="/explorer?siteId=${s.id}" style="text-decoration:none;color:inherit;"><div class="site-item" style="cursor:pointer;"><div class="site-info"><h3><span class="status-dot ${sc}"></span>${s.name}</h3><p>${s.host}:${s.port} · ${s.protocol.toUpperCase()} · ${s.basePath}</p></div></div></a>`;
+          return `<a href="/explorer?siteId=${encodeURIComponent(s.id)}" style="text-decoration:none;color:inherit;"><div class="site-item" style="cursor:pointer;"><div class="site-info"><h3><span class="status-dot ${sc}"></span>${escHtml(s.name)}</h3><p>${escHtml(s.host)}:${escHtml(s.port)} · ${escHtml(s.protocol.toUpperCase())} · ${escHtml(s.basePath)}</p></div></div></a>`;
         }).join('');
       }
 

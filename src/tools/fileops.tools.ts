@@ -12,7 +12,7 @@ import {
   deleteFileSchema, deleteDirectorySchema, renameSchema,
 } from "../schemas/fileops.schema.js";
 import { ConnectionManager, getSelectedSiteConfig, getConnectionForSite, loadEnvConfig, invalidateSiteConnection } from "../services/connection.manager.js";
-import { isExtensionAllowed, truncateByLines, generateBackupName, logToStderr } from "../services/file.utils.js";
+import { isExtensionAllowed, isRenameAllowed, truncateByLines, generateBackupName, logToStderr } from "../services/file.utils.js";
 import { formatFileRead, formatFileWrite, formatDirCreated, formatDeleted, formatRenamed } from "../helpers/format.helper.js";
 import {
   formatFileError, formatNotConnectedError, formatPathError,
@@ -269,6 +269,9 @@ export function registerFileOpsTools(server: McpServer, enabledTools?: Set<strin
           return { content: [{ type: "text" as const, text: NO_SITE_MSG }], isError: true };
         }
         siteId = ctx.siteId;
+        if (!isRenameAllowed(params.old_path, params.new_path, ctx.manager.getEnvConfig().allowedExtensions)) {
+          return { content: [{ type: "text" as const, text: "Error: la extension de destino no esta permitida" }], isError: true };
+        }
         const oldResolved = ctx.manager.resolvePath(params.old_path);
         const newResolved = ctx.manager.resolvePath(params.new_path);
         await ctx.manager.rename(params.old_path, params.new_path);

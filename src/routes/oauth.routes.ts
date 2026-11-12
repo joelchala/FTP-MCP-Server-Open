@@ -181,11 +181,51 @@ oauthTokenRouter.post("/authorize", async (req, res) => {
       return;
     }
 
+    // Solo S256 y challenge con formato valido (43-128 chars base64url)
+    if (
+      (code_challenge_method && code_challenge_method !== "S256") ||
+      typeof code_challenge !== "string" ||
+      !/^[A-Za-z0-9_-]{43,128}$/.test(code_challenge)
+    ) {
+      res.status(400).json({
+        error: "invalid_request",
+        error_description: "Se requiere PKCE con code_challenge_method=S256",
+      });
+      return;
+    }
+
+    // redirect_uri: solo http(s) (bloquea javascript:, data:, etc.)
+    let parsedRedirect: URL;
+    try {
+      parsedRedirect = new URL(String(redirect_uri));
+    } catch {
+      parsedRedirect = new URL("about:blank");
+    }
+    if (parsedRedirect.protocol !== "https:" && parsedRedirect.protocol !== "http:") {
+      res.status(400).json({
+        error: "invalid_request",
+        error_description: "redirect_uri invalido",
+      });
+      return;
+    }
+
+    const db = getDatabase();
+
+    // El client_id debe existir, estar activo y pertenecer al usuario autenticado
+    const oauthClient = await withDbRecovery(() =>
+      db.oauthClient.findUnique({ where: { clientId: String(client_id) } })
+    );
+    if (!oauthClient || !oauthClient.isActive || oauthClient.userId !== userId) {
+      res.status(400).json({
+        error: "invalid_client",
+        error_description: "client_id invalido para este usuario",
+      });
+      return;
+    }
+
     // Generar authorization code
     const code = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
-
-    const db = getDatabase();
 
     // Guardar en BD (con auto-recovery)
     await withDbRecovery(() =>
@@ -206,7 +246,7 @@ oauthTokenRouter.post("/authorize", async (req, res) => {
     logToStderr(`[OAUTH] Authorization code generado para usuario ${userId}, client: ${client_id}`);
 
     // Construir URL de redireccion con code y state
-    const redirectUrl = new URL(redirect_uri);
+    const redirectUrl = parsedRedirect;
     redirectUrl.searchParams.set("code", code);
     if (state) {
       redirectUrl.searchParams.set("state", state);

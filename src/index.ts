@@ -169,7 +169,7 @@ async function startHttpServer(): Promise<void> {
   // Endpoint POST /oauth/token (publico, para Claude.ai client_credentials)
   // Importar solo el handler de token, sin requerir sesion web
   const { oauthTokenRouter } = await import("./routes/oauth.routes.js");
-  app.use("/oauth", oauthTokenRouter);
+  app.use("/oauth", authLimiter, oauthTokenRouter);
 
   // Rutas de paginas HTML del panel web
   app.use(pagesRoutes);
@@ -181,64 +181,6 @@ async function startHttpServer(): Promise<void> {
   // Health check
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", server: SERVER_NAME, version: SERVER_VERSION });
-  });
-
-  // Debug health — muestra estado de env vars y componentes
-  app.get("/debug/health", async (_req, res) => {
-    const checks: Record<string, unknown> = {
-      status: "ok",
-      timestamp: new Date().toISOString(),
-      env: {
-        BASE_URL: process.env.BASE_URL ?? "(not set)",
-        NODE_ENV: process.env.NODE_ENV ?? "(not set)",
-        TRANSPORT: process.env.TRANSPORT ?? "(not set, default=http)",
-        HAS_JWT_SECRET: !!process.env.JWT_SECRET,
-        HAS_ENCRYPTION_KEY: !!process.env.ENCRYPTION_KEY,
-        HAS_DATABASE_URL: !!process.env.DATABASE_URL,
-        DATABASE_URL_LENGTH: process.env.DATABASE_URL?.length ?? 0,
-        PORT: port,
-      },
-    };
-
-    // Test DB connection
-    try {
-      const { getDatabase } = await import("./config/database.js");
-      const db = getDatabase();
-      await db.$queryRaw`SELECT 1 as test`;
-      checks.database = "connected";
-    } catch (dbErr) {
-      checks.database = `ERROR: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`;
-    }
-
-    // Test bcryptjs
-    try {
-      const { hashPassword } = await import("./auth/password.js");
-      const hash = await hashPassword("test123");
-      checks.bcryptjs = hash ? "working" : "ERROR: empty hash";
-    } catch (bcErr) {
-      checks.bcryptjs = `ERROR: ${bcErr instanceof Error ? bcErr.message : String(bcErr)}`;
-    }
-
-    // Test encryption
-    try {
-      const { encrypt, decrypt } = await import("./config/encryption.js");
-      const enc = encrypt("test_value");
-      const dec = decrypt(enc);
-      checks.encryption = dec === "test_value" ? "working" : "ERROR: decrypt mismatch";
-    } catch (encErr) {
-      checks.encryption = `ERROR: ${encErr instanceof Error ? encErr.message : String(encErr)}`;
-    }
-
-    // Test session creation (dry run)
-    try {
-      const { randomBytes } = await import("node:crypto");
-      const token = randomBytes(32).toString("hex");
-      checks.crypto = token.length === 64 ? "working" : "ERROR: unexpected length";
-    } catch (cryptoErr) {
-      checks.crypto = `ERROR: ${cryptoErr instanceof Error ? cryptoErr.message : String(cryptoErr)}`;
-    }
-
-    res.json(checks);
   });
 
   // Catch-all: rutas no encontradas — devolver 404 JSON para /api/*, SPA fallback para otras

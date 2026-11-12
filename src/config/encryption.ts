@@ -20,6 +20,12 @@ function getEncryptionKey(): Buffer {
       "ENCRYPTION_KEY no configurada o inválida. Debe ser un hex valido de 64 caracteres (32 bytes)."
     );
   }
+  // Rechaza el placeholder de .env.example (todos los caracteres iguales, p.ej. 000...0)
+  if (/^(.)\1*$/.test(key)) {
+    throw new Error(
+      "ENCRYPTION_KEY es un valor de ejemplo inseguro. Genera una con: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    );
+  }
   return Buffer.from(key, "hex");
 }
 

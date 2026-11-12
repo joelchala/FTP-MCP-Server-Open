@@ -368,7 +368,7 @@
         }
 
         // Redirigir con el authorization code
-        if (data.redirect_uri) {
+        if (data.redirect_uri && /^https?:\/\//i.test(data.redirect_uri)) {
           window.location.href = data.redirect_uri;
         } else {
           showError('No se recibio la URL de redireccion');

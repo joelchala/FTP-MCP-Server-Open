@@ -5,6 +5,15 @@
  * Descripcion: Modulo JS compartido — sidebar, auth, toast, utilidades
  */
 
+// ─── Escape HTML ───────────────────────────────────────
+function escHtml(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+// Argumento JS seguro dentro de onclick="..."
+function jsAttr(str) {
+  return escHtml(JSON.stringify(String(str ?? '')));
+}
+
 // ─── Auth Guard ─────────────────────────────────────────
 async function checkAuth() {
   try {
@@ -97,8 +106,8 @@ function initHeaderUser(user) {
       <div class="header-user">
         <div class="header-user-avatar">${initials}</div>
         <div class="header-user-info">
-          <div class="header-user-name">${user.name || 'Usuario'}</div>
-          <div class="header-user-email">${user.email || ''}</div>
+          <div class="header-user-name">${escHtml(user.name || 'Usuario')}</div>
+          <div class="header-user-email">${escHtml(user.email || '')}</div>
         </div>
       </div>
       <button class="header-logout" onclick="handleLogout()">
@@ -185,8 +194,8 @@ function confirmDialog(message, onConfirm, options = {}) {
   modal.className = 'modal';
   modal.style.maxWidth = '420px';
   modal.innerHTML = `
-    <h3>${title}</h3>
-    <p style="color: var(--text-secondary); margin: 16px 0 24px; font-size: 14px; line-height: 1.5;">${message}</p>
+    <h3>${escHtml(title)}</h3>
+    <p style="color: var(--text-secondary); margin: 16px 0 24px; font-size: 14px; line-height: 1.5;">${escHtml(message)}</p>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="confirm-cancel">${cancelText}</button>
       <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="confirm-ok">${confirmText}</button>
@@ -225,9 +234,9 @@ function promptDialog(message, defaultValue, onConfirm, options = {}) {
   modal.className = 'modal';
   modal.style.maxWidth = '420px';
   modal.innerHTML = `
-    <h3>${title}</h3>
-    <p style="color: var(--text-secondary); margin: 12px 0 16px; font-size: 14px;">${message}</p>
-    <input type="text" id="prompt-input" value="${defaultValue || ''}" style="width: 100%; padding: 10px 12px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px; font-family: inherit; margin-bottom: 20px;">
+    <h3>${escHtml(title)}</h3>
+    <p style="color: var(--text-secondary); margin: 12px 0 16px; font-size: 14px;">${escHtml(message)}</p>
+    <input type="text" id="prompt-input" value="${escHtml(defaultValue || '')}" style="width: 100%; padding: 10px 12px; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 8px; color: var(--text-primary); font-size: 14px; font-family: inherit; margin-bottom: 20px;">
     <div class="modal-footer">
       <button class="btn btn-secondary" id="prompt-cancel">${cancelText}</button>
       <button class="btn btn-primary" id="prompt-ok">${confirmText}</button>

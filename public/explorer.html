@@ -197,13 +197,13 @@
           else if (['env','ini','conf'].includes(ext)) icon = '&#9881;';
         }
 
-        let html = `<div class="tree-item${isSelected ? ' selected' : ''}" style="padding-left:${12 + indent}px;" onclick="${isDir ? `toggleFolder('${entryPath}')` : `selectFile('${entryPath}')`}">`;
+        let html = `<div class="tree-item${isSelected ? ' selected' : ''}" style="padding-left:${12 + indent}px;" onclick="${isDir ? `toggleFolder(${jsArg(entryPath)})` : `selectFile(${jsArg(entryPath)})`}">`;
         html += `<span class="tree-arrow ${isDir ? (isExpanded ? 'expanded' : '') : 'hidden'}">&#9654;</span>`;
         html += `<span class="tree-icon">${icon}</span>`;
-        html += `<span class="tree-label">${entry.name}</span>`;
+        html += `<span class="tree-label">${escapeHtml(entry.name)}</span>`;
         html += `<span class="tree-actions">`;
-        html += `<button onclick="event.stopPropagation();renameItem('${entryPath}')" title="Renombrar">&#9999;</button>`;
-        html += `<button onclick="event.stopPropagation();deleteItem('${entryPath}','${isDir ? 'directory' : 'file'}')" title="Eliminar">&#128465;</button>`;
+        html += `<button onclick="event.stopPropagation();renameItem(${jsArg(entryPath)})" title="Renombrar">&#9999;</button>`;
+        html += `<button onclick="event.stopPropagation();deleteItem(${jsArg(entryPath)},'${isDir ? 'directory' : 'file'}')" title="Eliminar">&#128465;</button>`;
         html += `</span></div>`;
 
         if (isDir && isExpanded && childNode?.children) {
@@ -366,7 +366,12 @@
     }
 
     function escapeHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Argumento JS seguro dentro de un atributo onclick="..." (literal JSON + escape HTML)
+    function jsArg(str) {
+      return escapeHtml(JSON.stringify(String(str)));
     }
 
     function toggleSearch() {
@@ -405,10 +410,10 @@
 
         const html = files.map(f => {
           const icon = f.type === 'directory' ? '&#128194;' : '&#128196;';
-          return `<div class="tree-item" onclick="selectFile('${f.path}')">
+          return `<div class="tree-item" onclick="selectFile(${jsArg(f.path)})">
             <span class="tree-arrow hidden">&#9654;</span>
             <span class="tree-icon">${icon}</span>
-            <span class="tree-label">${f.path}</span>
+            <span class="tree-label">${escapeHtml(f.path)}</span>
           </div>`;
         }).join('');
 

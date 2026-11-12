@@ -18,6 +18,8 @@ export const authRoutes = Router();
 
 const SESSION_COOKIE_NAME = "session_token";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
+// Cookie Secure tambien cuando el despliegue es HTTPS aunque NODE_ENV no sea production
+const USE_SECURE_COOKIE = IS_PRODUCTION || (process.env.BASE_URL ?? "").startsWith("https://");
 
 // Schema de validacion para registro
 const registerSchema = z.object({
@@ -36,7 +38,7 @@ const loginSchema = z.object({
 function setSessionCookie(res: import("express").Response, token: string): void {
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: IS_PRODUCTION,
+    secure: USE_SECURE_COOKIE,
     sameSite: "lax",
     maxAge: 24 * 60 * 60 * 1000, // 24 horas
     path: "/",

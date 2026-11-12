@@ -5,6 +5,9 @@
   "author": "Joel Chala",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "main": "dist/index.js",
   "bin": {
     "ftp-mcp-server-open": "dist/index.js"
@@ -38,7 +41,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@prisma/client": "^6.0.0",
-    "basic-ftp": "^5.0.5",
+    "basic-ftp": "^6.2.6",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
