@@ -14,6 +14,7 @@ import { MAX_SITES_PER_USER } from "../constants.js";
 import { logToStderr } from "../services/file.utils.js";
 import { FtpClient } from "../services/ftp.client.js";
 import { SftpFileClient } from "../services/sftp.client.js";
+import { assertHostAllowed } from "../services/host-guard.js";
 import type { ConnectionConfig, Protocol } from "../types.js";
 
 export const sitesRoutes = Router();
@@ -175,6 +176,7 @@ sitesRoutes.post("/:id/test", async (req, res) => {
     const client = site.protocol === "sftp" ? new SftpFileClient() : new FtpClient();
 
     try {
+      await assertHostAllowed(config.host);
       await client.connect(config);
       const exists = await client.exists(site.basePath);
 
@@ -192,9 +194,13 @@ sitesRoutes.post("/:id/test", async (req, res) => {
         data: { lastTestedAt: new Date(), testStatus: "failed" },
       });
 
+      logToStderr(`[SITES] Test de conexion fallido: ${connError instanceof Error ? connError.message : String(connError)}`);
       res.json({
         success: false,
-        message: `Error de conexion: ${connError instanceof Error ? connError.message : String(connError)}`,
+        // Mensaje generico (salvo el bloqueo de host) para no permitir mapear redes internas
+        message: connError instanceof Error && connError.message.startsWith("Host no permitido")
+          ? connError.message
+          : "No se pudo conectar. Verifica host, puerto, protocolo y credenciales.",
       });
     } finally {
       // Siempre cerrar la conexion de prueba para evitar resource leaks

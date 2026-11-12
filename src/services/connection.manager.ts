@@ -23,6 +23,7 @@ import {
   SITE_SELECTION_TTL,
 } from "../constants.js";
 import type { Protocol } from "../types.js";
+import { assertHostAllowed } from "./host-guard.js";
 
 // Carga configuración desde variables de entorno (modo stdio/local)
 export function loadEnvConfig(): EnvConfig {
@@ -164,7 +165,8 @@ export async function getConnectionForSite(
     connectionCache.delete(siteId);
   }
 
-  // Crear nueva conexion
+  // Crear nueva conexion (modo HTTP: bloquea hosts internos)
+  await assertHostAllowed(config.host);
   const client = config.protocol === "sftp" ? new SftpFileClient() : new FtpClient();
   await client.connect(config);
   connectionCache.set(siteId, { client, config, lastUsed: Date.now() });

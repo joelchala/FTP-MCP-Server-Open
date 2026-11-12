@@ -125,6 +125,8 @@ npm start
 | `FTP_PASSWORD` | FTP password (stdio mode) | - |
 | `SFTP_PRIVATE_KEY_PATH` | SSH private key path | - |
 | `FTP_BASE_PATH` | Root sandbox directory | `/public_html` |
+| `ALLOW_REGISTRATION` | Allow new sign-ups after the first user (HTTP mode) | `false` |
+| `ALLOW_PRIVATE_HOSTS` | Allow sites on internal/private networks (HTTP mode) | `false` |
 | `FTP_MAX_FILE_SIZE` | Max read size (bytes) | `5242880` (5MB) |
 | `FTP_ALLOWED_EXTENSIONS` | Writable file extensions | See .env.example |
 | `FTP_READ_TIMEOUT` | Read timeout (ms) | `120000` (2 min) |
@@ -411,8 +413,8 @@ SQLite (default) or MySQL with Prisma ORM. Models:
 ### Known limitations (read before exposing to the internet)
 
 - **Generate your own secrets.** `ENCRYPTION_KEY` and `JWT_SECRET` are empty in `.env.example`; the server refuses placeholder values.
-- **User registration is open.** Any visitor can create an account. Put the panel behind a VPN/reverse-proxy auth if it is public.
-- **Users can point sites to any host.** There is no block for private/internal addresses (SSRF). Do not run it on a network with sensitive internal services unless you trust all users.
+- **Registration closes after the first user.** Set `ALLOW_REGISTRATION=true` to let others sign up.
+- **Internal hosts are blocked.** Sites pointing to localhost/private/link-local addresses are rejected (SSRF protection). Set `ALLOW_PRIVATE_HOSTS=true` to use a LAN FTP server.
 - **Plain FTP is unencrypted and SFTP does not pin host keys.** Prefer a trusted network or a VPN.
 - **Write whitelist includes `.php`, `.htaccess` and `.env` by default.** Narrow `FTP_ALLOWED_EXTENSIONS` to what you need.
 

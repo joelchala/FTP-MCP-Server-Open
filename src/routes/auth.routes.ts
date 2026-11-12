@@ -57,6 +57,12 @@ authRoutes.post("/register", async (req, res) => {
     const { email, password, name } = parsed.data;
     const db = getDatabase();
 
+    // Registro cerrado tras el primer usuario, salvo ALLOW_REGISTRATION=true
+    if (process.env.ALLOW_REGISTRATION !== "true" && (await db.user.count()) > 0) {
+      res.status(403).json({ error: "El registro esta deshabilitado en este servidor." });
+      return;
+    }
+
     // Verificar si el email ya existe
     const existing = await db.user.findUnique({ where: { email } });
     if (existing) {
